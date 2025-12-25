@@ -12,13 +12,13 @@ int main() {
   Base *pA = new A;
   Base *pB = new B;
 
-  StaticDispatcher<Base, Base, A, B>::Dispatch(
+  StaticDispatcher<Base, Base, std::tuple<void>, A, B>::dispatch(
       pA, pB,
-      [](int *l, auto *r) {
-        std::cout << "Found types: " << typeid(*l).name() << " and "
-                  << typeid(*r).name() << "\n";
-      },
-      [](A *a, B *b) { std::cout << "a: " << a << ", b: " << b << '\n'; });
+      std::make_tuple(
+          [](int *l, auto *r) {
+            std::cout << "Found types: " << typeid(*l).name() << " and " << typeid(*r).name() << "\n";
+          },
+          [](A *a, B *b) { std::cout << "a: " << a << ", b: " << b << '\n'; }));
 
   delete pA;
   delete pB;

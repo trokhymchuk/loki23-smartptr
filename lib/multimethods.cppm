@@ -1,36 +1,66 @@
 module;
 
-#include <type_traits>
 #include <stdexcept>
+#include <tuple>
+#include <type_traits>
+
+#include <iostream>
 
 export module loki23:multimethods;
 
 import :type_list;
 
-template <typename T, typename E, typename... Executors>
-bool execute(T &lhs, E &rhs, Executors... exec) {
-  bool found = (... || ([&]() {
-                  if constexpr (std::is_invocable<decltype(exec), decltype(lhs),
-                                                  decltype(rhs)>::value) {
-                    exec(lhs, rhs);
-                    return true;
-                  }
-                  return false;
-                }()));
+template <typename Holder = void> struct Executor;
+template <> struct Executor<void> {
+  template <typename T, typename E, typename... Executors> static bool execute(T &lhs, E &rhs, Executors... execs) {
+    bool found = (... || ([&]() {
+                    if constexpr (std::is_invocable<decltype(execs), decltype(lhs), decltype(rhs)>::value) {
+                      execs(lhs, rhs);
+                      return true;
+                    }
+                    return false;
+                  }()));
 
-  return found;
-}
+    return found;
+  }
+};
 
+template <typename T, typename E, std::size_t i, std::size_t size, typename... Executors> struct UnpackExecTuple {
+  static bool execute(T &lhs, E &rhs, std::tuple<Executors...> execs) {
+    if constexpr (i >= size) {
+      std::cerr << "size matched\n";
+
+      return false;
+    } else {
+
+      auto exec = std::get<i>(execs);
+
+      if constexpr (std::is_invocable<decltype(exec), decltype(lhs), decltype(rhs)>::value) {
+        exec(lhs, rhs);
+        return true;
+      }
+
+      return UnpackExecTuple<T, E, i + 1, size, Executors...>::execute(lhs, rhs, execs);
+    }
+  }
+};
+
+template <> struct Executor<std::tuple<void>> {
+  template <typename T, typename E, typename... Executors>
+  static bool execute(T &lhs, E &rhs, std::tuple<Executors...> execs) {
+    return UnpackExecTuple<T, E, 0, std::tuple_size_v<decltype(execs)>, Executors...>::execute(lhs, rhs, execs);
+  }
+};
 export {
-  template <typename BaseLhs, typename BaseRhs, typename... Ts>
-  struct StaticDispatcher {
-    template <typename... Executors>
-    static void Dispatch(BaseLhs *lhs, BaseRhs *rhs, Executors... exec) {
+
+  template <typename BaseLhs, typename BaseRhs, typename Holder, typename... Ts> struct StaticDispatcher;
+  template <typename BaseLhs, typename BaseRhs, typename... Ts> struct StaticDispatcher<BaseLhs, BaseRhs, void, Ts...> {
+    template <typename... Executors> static void dispatch(BaseLhs *lhs, BaseRhs *rhs, Executors... execs) {
       bool found = (... || ([&]() {
                       if (auto *l = dynamic_cast<Ts *>(lhs)) {
                         return (... || ([&]() {
                                   if (auto *r = dynamic_cast<Ts *>(rhs)) {
-                                    return execute(l, r, exec...);
+                                    return Executor<void>::execute(l, r, execs...);
                                   }
                                   return false;
                                 }()));
@@ -42,4 +72,29 @@ export {
       }
     }
   };
+
+  template <typename BaseLhs, typename BaseRhs, typename... Ts>
+  struct StaticDispatcher<BaseLhs, BaseRhs, std::tuple<void>, Ts...> {
+    template <typename... Executors> static void dispatch(BaseLhs *lhs, BaseRhs *rhs, std::tuple<Executors...> execs) {
+      bool found = (... || ([&]() {
+                      if (auto *l = dynamic_cast<Ts *>(lhs)) {
+                        return (... || ([&]() {
+                                  if (auto *r = dynamic_cast<Ts *>(rhs)) {
+                                    return Executor<std::tuple<void>>::execute(l, r, execs);
+                                  }
+                                  return false;
+                                }()));
+                      }
+                      return false;
+                    }()));
+      if (!found) {
+        throw std::runtime_error{"Tuple dispatcher was not found"};
+      }
+    }
+  };
+
+  template <typename BaseLhs, typename BaseRhs, typename... LhsTypes, typename... RhsTypes>
+  auto make_static_dispatch(type_list<LhsTypes...>, type_list<RhsTypes...>) {
+    return StaticDispatcher<BaseLhs, BaseRhs, LhsTypes..., RhsTypes...>();
+  }
 }
