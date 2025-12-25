@@ -1,8 +1,14 @@
 module;
 
+#include <array>
+#include <functional>
 #include <stdexcept>
 #include <tuple>
 #include <type_traits>
+#include <typeindex>
+#include <typeinfo>
+#include <unordered_map>
+#include <vector>
 
 #include <iostream>
 
@@ -28,8 +34,6 @@ template <> struct Executor<void> {
 template <typename T, typename E, std::size_t i, std::size_t size, typename... Executors> struct UnpackExecTuple {
   static bool execute(T &lhs, E &rhs, std::tuple<Executors...> execs) {
     if constexpr (i >= size) {
-      std::cerr << "size matched\n";
-
       return false;
     } else {
 
@@ -97,4 +101,42 @@ export {
   auto make_static_dispatch(type_list<LhsTypes...>, type_list<RhsTypes...>) {
     return StaticDispatcher<BaseLhs, BaseRhs, LhsTypes..., RhsTypes...>();
   }
+}
+
+struct TypeIndexArrayHash {
+  template <std::size_t size> std::size_t operator()(std::array<std::type_index, size> array) const {
+    std::size_t hash{};
+    if (size == 0)
+      return hash;
+
+    hash = array[0].hash_code();
+
+    for (std::size_t i{}; i != size; ++i) {
+      hash ^= array[i].hash_code() << 1;
+    }
+  
+    return hash;
+  }
+};
+
+export {
+  template <typename... Args> struct DynamicDispatcher {
+    static constexpr std::size_t n_args{sizeof...(Args)};
+    using Callback = std::function<void(Args...)>;
+    std::unordered_map<std::array<std::type_index, n_args>, Callback, TypeIndexArrayHash> callbacks_;
+
+    template <typename... ActualArgs> void add(std::function<void(ActualArgs...)> callback) {
+      callbacks_[std::array<std::type_index, n_args>{std::type_index(typeid(ActualArgs))...}] =
+          [callback](Args... args) { callback(static_cast<ActualArgs>(args)...); };
+    }
+
+    void dispatch(Args... args) {
+      auto it{callbacks_.find(std::array<std::type_index, n_args>{std::type_index(typeid(args))...})};
+
+      if (it == callbacks_.end()) {
+        throw std::runtime_error{"Cannot find dispatcher"};
+      }
+      return it->second(args...);
+    }
+  };
 }
