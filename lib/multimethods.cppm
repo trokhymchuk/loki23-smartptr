@@ -6,11 +6,7 @@ module;
 #include <tuple>
 #include <type_traits>
 #include <typeindex>
-#include <typeinfo>
 #include <unordered_map>
-#include <vector>
-
-#include <iostream>
 
 export module loki23:multimethods;
 
@@ -18,7 +14,8 @@ import :type_list;
 
 template <typename Holder = void> struct Executor;
 template <> struct Executor<void> {
-  template <typename T, typename E, typename... Executors> static bool execute(T &lhs, E &rhs, Executors... execs) {
+  template <typename LhsT, typename RhsT, typename... Functors>
+  static bool execute(LhsT &lhs, RhsT &rhs, Functors... execs) {
     bool found = (... || ([&]() {
                     if constexpr (std::is_invocable<decltype(execs), decltype(lhs), decltype(rhs)>::value) {
                       execs(lhs, rhs);
@@ -31,8 +28,8 @@ template <> struct Executor<void> {
   }
 };
 
-template <typename T, typename E, std::size_t i, std::size_t size, typename... Executors> struct UnpackExecTuple {
-  static bool execute(T &lhs, E &rhs, std::tuple<Executors...> execs) {
+template <typename LhsT, typename RhsT, std::size_t i, std::size_t size, typename... Functors> struct UnpackExecTuple {
+  static bool execute(LhsT &lhs, RhsT &rhs, std::tuple<Functors...> execs) {
     if constexpr (i >= size) {
       return false;
     } else {
@@ -44,33 +41,40 @@ template <typename T, typename E, std::size_t i, std::size_t size, typename... E
         return true;
       }
 
-      return UnpackExecTuple<T, E, i + 1, size, Executors...>::execute(lhs, rhs, execs);
+      return UnpackExecTuple<LhsT, RhsT, i + 1, size, Functors...>::execute(lhs, rhs, execs);
     }
   }
 };
 
 template <> struct Executor<std::tuple<void>> {
-  template <typename T, typename E, typename... Executors>
-  static bool execute(T &lhs, E &rhs, std::tuple<Executors...> execs) {
-    return UnpackExecTuple<T, E, 0, std::tuple_size_v<decltype(execs)>, Executors...>::execute(lhs, rhs, execs);
+  template <typename LhsT, typename RhsT, typename... Functors>
+  static bool execute(LhsT &lhs, RhsT &rhs, std::tuple<Functors...> execs) {
+    return UnpackExecTuple<LhsT, RhsT, 0, std::tuple_size_v<decltype(execs)>, Functors...>::execute(lhs, rhs, execs);
   }
 };
+
+template <typename BaseLhs, typename BaseRhs, typename ExecutorType, typename... Ts> struct StaticDispatcherExecutor {
+  template <typename... Functors> static bool execute(BaseLhs *lhs, BaseRhs *rhs, Functors... execs) {
+    return (... || ([&]() {
+              if (auto *l = dynamic_cast<Ts *>(lhs)) {
+                return (... || ([&]() {
+                          if (auto *r = dynamic_cast<Ts *>(rhs)) {
+                            return Executor<ExecutorType>::execute(l, r, execs...);
+                          }
+                          return false;
+                        }()));
+              }
+              return false;
+            }()));
+  }
+};
+
 export {
 
-  template <typename BaseLhs, typename BaseRhs, typename Holder, typename... Ts> struct StaticDispatcher;
+  template <typename BaseLhs, typename BaseRhs, typename... Ts> struct StaticDispatcher;
   template <typename BaseLhs, typename BaseRhs, typename... Ts> struct StaticDispatcher<BaseLhs, BaseRhs, void, Ts...> {
-    template <typename... Executors> static void dispatch(BaseLhs *lhs, BaseRhs *rhs, Executors... execs) {
-      bool found = (... || ([&]() {
-                      if (auto *l = dynamic_cast<Ts *>(lhs)) {
-                        return (... || ([&]() {
-                                  if (auto *r = dynamic_cast<Ts *>(rhs)) {
-                                    return Executor<void>::execute(l, r, execs...);
-                                  }
-                                  return false;
-                                }()));
-                      }
-                      return false;
-                    }()));
+    template <typename... Functors> static void dispatch(BaseLhs *lhs, BaseRhs *rhs, Functors... execs) {
+      bool found = StaticDispatcherExecutor<BaseLhs, BaseRhs, void, Ts...>::execute(lhs, rhs, execs...);
       if (!found) {
         throw std::runtime_error{"Dispatcher was not found"};
       }
@@ -80,19 +84,9 @@ export {
   template <typename BaseLhs, typename BaseRhs, typename... Ts>
   struct StaticDispatcher<BaseLhs, BaseRhs, std::tuple<void>, Ts...> {
     template <typename... Executors> static void dispatch(BaseLhs *lhs, BaseRhs *rhs, std::tuple<Executors...> execs) {
-      bool found = (... || ([&]() {
-                      if (auto *l = dynamic_cast<Ts *>(lhs)) {
-                        return (... || ([&]() {
-                                  if (auto *r = dynamic_cast<Ts *>(rhs)) {
-                                    return Executor<std::tuple<void>>::execute(l, r, execs);
-                                  }
-                                  return false;
-                                }()));
-                      }
-                      return false;
-                    }()));
+      bool found = StaticDispatcherExecutor<BaseLhs, BaseRhs, std::tuple<void>, Ts...>::execute(lhs, rhs, execs);
       if (!found) {
-        throw std::runtime_error{"Tuple dispatcher was not found"};
+        throw std::runtime_error{"Dispatcher was not found"};
       }
     }
   };
@@ -104,23 +98,23 @@ export {
 }
 
 struct TypeIndexArrayHash {
-  
+
   template <std::size_t size> std::size_t operator()(std::array<std::type_index, size> array) const {
     static std::size_t hash{};
 
-    if(hash) {
-      return hash;
-    }
-  
     if (size == 0)
       return hash;
+
+    if (hash) {
+      return hash;
+    }
 
     hash = array[0].hash_code();
 
     for (std::size_t i{}; i != size; ++i) {
-      hash ^= array[i].hash_code() << 1;
+      hash ^= array[i].hash_code() << i;
     }
-  
+
     return hash;
   }
 };

@@ -9,7 +9,7 @@ struct Base {
 struct A : Base {};
 struct B : Base {};
 
-#if 0
+#if 1
 int main() {
   Base *pA = new A;
   Base *pB = new B;
@@ -27,6 +27,7 @@ int main() {
 }
 #endif
 
+#if 0
 int main() {
   Base *pA = new A;
   Base *pB = new B;
@@ -44,3 +45,5 @@ int main() {
   delete pA;
   delete pB;
 }
+
+#endif
