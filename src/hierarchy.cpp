@@ -69,7 +69,7 @@ int main() {
 }
 #endif
 
-#if 1
+#if 0
 
 struct Base {
   virtual ~Base() = default;
@@ -101,6 +101,51 @@ using ABFactory = GenLinearHierarchy<ConcreteFactory, type_list<A, B>>;
 int main() {
   ABFactory factory;
   A *a = Field<A>(factory).DoCreate();
+  B *b = Field<B>(factory).DoCreate();
+
+  delete b;
+  delete a;
+}
+
+#endif
+
+#if 1
+
+struct Base {
+  virtual ~Base() = default;
+};
+struct A : Base {};
+struct B : Base {};
+
+template <typename T>
+struct AbstractFactory {
+    virtual T* DoCreate() = 0;
+    virtual ~AbstractFactory() = default;
+};
+
+using ABAbstractFactoryInterface = GenScatterHierarchy<AbstractFactory, type_list<A, B>>;
+
+template <class T>
+struct ConcereteFactory {
+        T* DoCreate() {
+        std::cout << "Creating " << typeid(T).name() << '\n';
+        return new T();
+    }
+};
+
+template <>
+struct ConcereteFactory<A> {
+        A* DoCreate(int a) {
+        std::cout << "Creating " << typeid(A).name() << " with " << a << '\n';
+        return new A();
+    }
+};
+
+using ABFactory = GenLinearHierarchy<ConcereteFactory, type_list<A, B>>;
+
+int main() {
+  ABFactory factory;
+  A *a = Field<A>(factory).DoCreate(6);
   B *b = Field<B>(factory).DoCreate();
 
   delete b;
