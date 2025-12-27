@@ -5,7 +5,7 @@
 
 import loki23;
 
-#if 1
+#if 0
 
 struct DB {
   DB(const std::string &username, const std::string &password) {
@@ -51,7 +51,9 @@ int main() {
   DBUser p1{Field<DB>(obj)};
   p1.use();
 }
-#else
+#endif
+
+#if 0
 int main() {
   GenLinearHierarchy<
       LazyHolder, type_list<std::string, int, type_list<std::vector<double>>>>
@@ -65,4 +67,44 @@ int main() {
   std::cout << Field<std::vector<double>>(obj).get().size() << "\n";
   std::cout << Field<std::vector<double>>(obj).mem_location() << '\n';
 }
+#endif
+
+#if 1
+
+struct Base {
+  virtual ~Base() = default;
+};
+struct A : Base {};
+struct B : Base {};
+
+template <typename T>
+struct AbstractFactory {
+    virtual T* DoCreate() = 0;
+    virtual ~AbstractFactory() = default;
+};
+
+using ABAbstractFactoryInterface = GenScatterHierarchy<AbstractFactory, type_list<A, B>>;
+
+template <class T, class Base>
+struct AbstractConcereteFactory : public Base {
+        T* DoCreate() override {
+        std::cout << "Creating " << typeid(T).name() << '\n';
+        return new T();
+    }
+};
+
+template <typename T>
+using ConcreteFactory = AbstractConcereteFactory<T, AbstractFactory<T>>;
+
+using ABFactory = GenLinearHierarchy<ConcreteFactory, type_list<A, B>>;
+
+int main() {
+  ABFactory factory;
+  A *a = Field<A>(factory).DoCreate();
+  B *b = Field<B>(factory).DoCreate();
+
+  delete b;
+  delete a;
+}
+
 #endif

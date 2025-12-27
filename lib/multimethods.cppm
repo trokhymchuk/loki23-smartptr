@@ -104,8 +104,14 @@ export {
 }
 
 struct TypeIndexArrayHash {
+  
   template <std::size_t size> std::size_t operator()(std::array<std::type_index, size> array) const {
-    std::size_t hash{};
+    static std::size_t hash{};
+
+    if(hash) {
+      return hash;
+    }
+  
     if (size == 0)
       return hash;
 
