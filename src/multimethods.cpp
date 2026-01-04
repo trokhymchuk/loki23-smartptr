@@ -9,7 +9,7 @@ struct Base {
 struct A : Base {};
 struct B : Base {};
 
-#if 1
+#if 0
 int main() {
   Base *pA = new A;
   Base *pB = new B;
@@ -27,10 +27,13 @@ int main() {
 }
 #endif
 
-#if 0
+#if 1
 int main() {
-  Base *pA = new A;
-  Base *pB = new B;
+  A a;
+  B b;
+
+  Base &rA = a;
+  Base &rB = b;
 
   auto dispatcher = DynamicDispatcher<Base &, Base &>{};
 
@@ -40,10 +43,7 @@ int main() {
   dispatcher.add(l1);
   dispatcher.add(l2);
 
-  dispatcher.dispatch(*pA, *pB);
-
-  delete pA;
-  delete pB;
+  dispatcher.dispatch(rA, rB);
 }
 
 #endif

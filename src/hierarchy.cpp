@@ -123,19 +123,25 @@ struct AbstractFactory {
     virtual ~AbstractFactory() = default;
 };
 
+template <>
+struct AbstractFactory<A> {
+    virtual A* DoCreate(int a) = 0;
+    virtual ~AbstractFactory() = default;
+};
+
 using ABAbstractFactoryInterface = GenScatterHierarchy<AbstractFactory, type_list<A, B>>;
 
 template <class T>
-struct ConcereteFactory {
-        T* DoCreate() {
+struct ConcereteFactory: AbstractFactory<T> {
+        T* DoCreate() override {
         std::cout << "Creating " << typeid(T).name() << '\n';
         return new T();
     }
 };
 
 template <>
-struct ConcereteFactory<A> {
-        A* DoCreate(int a) {
+struct ConcereteFactory<A> : AbstractFactory<A> {
+        A* DoCreate(int a) override {
         std::cout << "Creating " << typeid(A).name() << " with " << a << '\n';
         return new A();
     }
