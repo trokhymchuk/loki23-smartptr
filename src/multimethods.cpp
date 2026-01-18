@@ -67,9 +67,7 @@ struct Number {
   virtual ~Number() = default;
 };
 
-std::ostream &operator<<(std::ostream &os, const Number &rhs) {
-  return os << rhs.representation;
-}
+std::ostream &operator<<(std::ostream &os, const Number &rhs) { return os << rhs.representation; }
 
 struct IntNumber : public Number {
   const int number;
@@ -86,7 +84,9 @@ struct DoubleNumber : public Number {
   DoubleNumber(std::string num) : Number(std::move(num)), number{std::stod(representation)} {}
 };
 
-DoubleNumber operator+(const DoubleNumber &lhs, const DoubleNumber &rhs) { return DoubleNumber{lhs.number + rhs.number}; }
+DoubleNumber operator+(const DoubleNumber &lhs, const DoubleNumber &rhs) {
+  return DoubleNumber{lhs.number + rhs.number};
+}
 DoubleNumber operator+(const DoubleNumber &lhs, const Number &rhs) { return lhs + DoubleNumber{rhs.representation}; }
 
 static std::complex<double> parse_complex(const std::string &representation) {
@@ -110,7 +110,9 @@ struct ComplexNumber : public Number {
   ComplexNumber(std::complex<double> num) : Number(std::format("{} + {}i", num.real(), num.imag())), number{num} {}
   ComplexNumber(std::string num) : Number(std::move(num)), number{parse_complex(representation)} {}
 };
-ComplexNumber operator+(const ComplexNumber &lhs, const ComplexNumber &rhs) { return ComplexNumber{lhs.number + rhs.number}; }
+ComplexNumber operator+(const ComplexNumber &lhs, const ComplexNumber &rhs) {
+  return ComplexNumber{lhs.number + rhs.number};
+}
 ComplexNumber operator+(const ComplexNumber &lhs, const Number &rhs) { return lhs + ComplexNumber{rhs.representation}; }
 
 // void f(IntNumber *iNumber, DoubleNumber *dNumb) {}
@@ -124,13 +126,20 @@ int main() {
 
   auto execs = std::make_tuple(
       [](IntNumber *iNumber, DoubleNumber *dNumber) {
-        std::cout << "Int first, double second: " << (*iNumber + *dNumber) << '\n';
+        std::cout << "Int first, double second: ";
       },
       [](DoubleNumber *dNumber, IntNumber *iNumber) {
-        std::cout << "Double first, int second: " << (*dNumber + *iNumber) << '\n';
+        std::cout << "Double first, int second: ";
+      },
+      [](IntNumber *iNumber, DoubleNumber *dNumber) {
+        std::cout << (*iNumber + *dNumber) << '\n';
+      },
+      [](DoubleNumber *dNumber, IntNumber *iNumber) {
+        std::cout << (*dNumber + *iNumber) << '\n';
       });
 
-    using dispatcher = StaticDispatcher<Number, Number, std::tuple<void>, IntNumber, DoubleNumber, ComplexNumber>;
+  using dispatcher = StaticDispatcher<DispatchPolicy::ALL_MATCHES, LogNoMatchPolicy, Number, Number, std::tuple<void>,
+                                      IntNumber, DoubleNumber, ComplexNumber>;
 
   dispatcher::dispatch(pInt, pDouble, execs);
 
@@ -149,23 +158,36 @@ int main() {
 int main() {
   IntNumber int_number = IntNumber{"1"};
   DoubleNumber double_number = DoubleNumber{"2.2"};
+  ComplexNumber complex_number = ComplexNumber{"3 + 3i"};
 
   Number &rInt = int_number;
   Number &rDouble = double_number;
+  Number &rComplex = complex_number;
 
-  auto dispatcher = DynamicDispatcher<Number &, Number &>{};
+  auto dispatcher = DynamicDispatcher<DispatchPolicy::ALL_MATCHES, LogNoMatchPolicy, Number &, Number &>{};
 
   std::function l1 = [](IntNumber &iNumber, DoubleNumber &dNumber) {
-    std::cout << "Int first, double second: " << (iNumber + dNumber) << '\n';
+    std::cout << "Int first, double second ";
   };
   std::function l2 = [](DoubleNumber &dNumber, IntNumber &iNumber) {
-    std::cout << "Double first, int second: " << (dNumber + iNumber) << '\n';
+    std::cout << "Double first, int second ";
   };
+  std::function l3 = [](IntNumber &iNumber, DoubleNumber &dNumber) {
+    std::cout << (iNumber + dNumber) << '\n';
+  };
+  std::function l4 = [](DoubleNumber &dNumber, IntNumber &iNumber) {
+    std::cout << (dNumber + iNumber) << '\n';
+  };
+  dispatcher.add(l3);
+  dispatcher.add(l4);
+
   dispatcher.add(l1);
   dispatcher.add(l2);
 
   dispatcher.dispatch(rInt, rDouble);
   dispatcher.dispatch(rDouble, rInt);
+
+  dispatcher.dispatch(rDouble, rComplex);
 }
 
 #endif
