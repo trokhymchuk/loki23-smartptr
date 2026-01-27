@@ -173,11 +173,6 @@ export {
       }
     }
   };
-
-  // template <typename BaseLhs, typename BaseRhs, typename... LhsTypes, typename... RhsTypes>
-  // auto make_static_dispatch(type_list<LhsTypes...>, type_list<RhsTypes...>) {
-  //   return StaticDispatcher<BaseLhs, BaseRhs, LhsTypes..., RhsTypes...>();
-  // }
 }
 
 struct TypeIndexArrayHash {

@@ -1,2 +1,3 @@
 add_executable(hierarchy hierarchy.cpp $<TARGET_OBJECTS:${CMAKE_PROJECT_NAME}>)
 add_executable(multimethods multimethods.cpp $<TARGET_OBJECTS:${CMAKE_PROJECT_NAME}>)
+add_executable(smart_ptr smart_ptr.cpp $<TARGET_OBJECTS:${CMAKE_PROJECT_NAME}>)
