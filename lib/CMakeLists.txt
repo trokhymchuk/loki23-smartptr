@@ -10,5 +10,8 @@ target_sources(${CMAKE_PROJECT_NAME}
     smart_ptr/conversion_policy.cppm
     smart_ptr/ownership_policy.cppm
     smart_ptr/storage_policy.cppm
+    singleton/singleton.cppm
+    singleton/creation_policy.cppm
+    singleton/lifetime_policy.cppm
     type_list.cppm
 )
