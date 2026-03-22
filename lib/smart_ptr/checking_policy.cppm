@@ -1,50 +1,40 @@
 module;
 
-#include <exception>
+#include <cassert>
 #include <iostream>
+#include <stdexcept>
 
 export module loki23.smart_ptr.checking;
 
 export {
 
-  template <typename Policy, typename Tptr>
-  concept CheckingPolicy = requires(Policy policy, Tptr ptr) {
-    { policy.on_init(ptr) } -> std::same_as<void>;
-    { policy.on_dereference(ptr) } -> std::same_as<void>;
-    { policy.on_release(ptr) } -> std::same_as<void>;
+  template <typename Policy>
+  concept CheckingPolicy = requires(bool b) {
+    { Policy::check(b) } -> std::same_as<void>;
   };
 
-  template <typename Tval, typename Tptr = Tval *> struct NoCheck {
-    static void on_init(Tptr) {}
-    static void on_dereference(Tptr) {}
-    static void on_release(Tptr) {}
+  struct NoCheck {
+    static void check(bool) noexcept {}
   };
 
-  template <typename Tval, typename Tptr = Tval *> struct ExceptionCheck {
-    static void on_init(Tptr ptr) {
-      if (!ptr)
-        throw std::invalid_argument("Null pointer initialization");
+  struct AssertCheck {
+    static void check(bool valid) noexcept {
+      assert(valid && "SmartPtr: invalid handle");
     }
-    static void on_dereference(Tptr ptr) {
-      if (!ptr)
-        throw std::runtime_error("Null pointer dereference");
-    }
-    static void on_release(Tptr) {}
   };
 
-  template <typename Tval, typename Tptr = Tval *> struct HaltCheck {
-    static void on_init(Tptr ptr) {
-      if (!ptr) {
-        std::cerr << "Null pointer initialization\n";
+  struct ExceptionCheck {
+    static void check(bool valid) {
+      if (!valid) throw std::runtime_error("SmartPtr: invalid handle");
+    }
+  };
+
+  struct HaltCheck {
+    static void check(bool valid) noexcept {
+      if (!valid) {
+        std::cerr << "SmartPtr: invalid handle\n";
         std::terminate();
       }
     }
-    static void on_dereference(Tptr ptr) {
-      if (!ptr) {
-        std::cerr << "Null pointer dereference\n";
-        std::terminate();
-      }
-    }
-    static void on_release(Tptr) {}
   };
 }

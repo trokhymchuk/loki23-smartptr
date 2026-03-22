@@ -3,7 +3,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 
-import loki23.resource;
+import loki23.smart_ptr.resource;
 
 // ============================================================
 // Intrusive reference-counted base
@@ -24,59 +24,59 @@ struct SensorData : IntrusiveBase {
 
 // ============================================================
 // Type aliases — behaviour defined entirely by policy selection.
-// The Resource class template is never modified.
+// SmartPtr replaces both the old SmartPtr and Resource classes.
 // ============================================================
 
 // Fast path: unique ownership, no runtime checks, heap pointer
-using FastResource    = Resource<int,        UniqueOwnership,   NoCheck,        PointerStorage>;
+using FastResource    = SmartPtr<int,        UniqueOwnership,   NoCheck,        DefaultStorage>;
 
 // Safe path: shared ownership, exception on invalid access, heap pointer
-using SafeResource    = Resource<int,        SharedOwnership,   ExceptionCheck, PointerStorage>;
+using SafeResource    = SmartPtr<int,        SharedOwnership,   ExceptionCheck, DefaultStorage>;
 
 // POSIX file: unique ownership, assert on bad fd, OS file descriptor
-using FileResource    = Resource<int,        UniqueOwnership,   AssertCheck,    FileDescriptorStorage>;
+using FileResource    = SmartPtr<int,        UniqueOwnership,   AssertCheck,    FileDescriptorStorage>;
 
 // Network socket: shared handle, exception on bad socket
-using SocketResource  = Resource<int,        SharedOwnership,   ExceptionCheck, SocketStorage>;
+using SocketResource  = SmartPtr<int,        SharedOwnership,   ExceptionCheck, SocketStorage>;
 
 // Intrusive: the managed object itself tracks reference count
-using IntrusiveResource = Resource<SensorData, IntrusiveOwnership, AssertCheck, PointerStorage>;
+using IntrusiveResource = SmartPtr<SensorData, IntrusiveOwnership, AssertCheck, DefaultStorage>;
 
 // ============================================================
 int main() {
     std::cout << "=== Policy-based Resource Manager ===\n\n";
 
     // ---------------------------------------------------------
-    // [1] UniqueOwnership + PointerStorage + NoCheck
+    // [1] UniqueOwnership + DefaultStorage + NoCheck
     // ---------------------------------------------------------
     std::cout << "[1] FastResource (Unique | NoCheck | Pointer)\n";
     {
         FastResource r{new int{42}};
         std::cout << "    value = " << *r << "\n";
 
-        FastResource r2 = std::move(r);          // ownership transferred, r is now empty
+        FastResource r2 = std::move(r);
         std::cout << "    after move: r.valid()="  << r.valid()
                   <<          "  r2.valid()=" << r2.valid() << "\n";
-    }  // r2 destructor deletes the int
+    }
 
     // ---------------------------------------------------------
-    // [2] SharedOwnership + PointerStorage + ExceptionCheck
+    // [2] SharedOwnership + DefaultStorage + ExceptionCheck
     // ---------------------------------------------------------
     std::cout << "\n[2] SafeResource (Shared | ExceptionCheck | Pointer)\n";
     {
         SafeResource r1{new int{100}};
         SafeResource r2 = r1;
         SafeResource r3 = r2;
-        std::cout << "    use_count = " << r1.use_count() << "\n";  // 3
+        std::cout << "    use_count = " << r1.use_count() << "\n";
         {
             SafeResource r4 = r3;
-            std::cout << "    use_count (inner scope) = " << r1.use_count() << "\n";  // 4
+            std::cout << "    use_count (inner scope) = " << r1.use_count() << "\n";
         }
-        std::cout << "    use_count (after inner scope) = " << r1.use_count() << "\n";  // 3
+        std::cout << "    use_count (after inner scope) = " << r1.use_count() << "\n";
 
         try {
             SafeResource bad{};
-            bad.get();  // throws: handle is invalid
+            bad.get();
         } catch (const std::runtime_error &e) {
             std::cout << "    caught: " << e.what() << "\n";
         }
@@ -91,7 +91,7 @@ int main() {
                         O_CREAT | O_WRONLY | O_TRUNC, 0644);
         FileResource file{fd};
         std::cout << "    fd=" << file.get() << "  valid=" << file.valid() << "\n";
-    }  // file descriptor closed here automatically
+    }
     std::cout << "    fd closed on scope exit\n";
 
     // ---------------------------------------------------------
@@ -101,14 +101,14 @@ int main() {
     {
         int sock = ::socket(AF_INET, SOCK_STREAM, 0);
         SocketResource s1{sock};
-        SocketResource s2 = s1;  // both share the same socket fd
+        SocketResource s2 = s1;
         std::cout << "    socket fd=" << s1.get()
                   << "  use_count=" << s1.use_count() << "\n";
-    }  // socket closed when last owner leaves scope
+    }
     std::cout << "    socket closed by last owner\n";
 
     // ---------------------------------------------------------
-    // [5] IntrusiveOwnership + PointerStorage + AssertCheck
+    // [5] IntrusiveOwnership + DefaultStorage + AssertCheck
     // ---------------------------------------------------------
     std::cout << "\n[5] IntrusiveResource (Intrusive | AssertCheck | Pointer)\n";
     {
@@ -116,8 +116,8 @@ int main() {
         IntrusiveResource ir2 = ir1;
         IntrusiveResource ir3 = ir2;
         std::cout << "    temperature  = " << ir1->temperature << "\n";
-        std::cout << "    ref_count    = " << ir1.use_count()  << "\n";  // 3
-    }  // object destroyed when last IntrusiveResource leaves scope
+        std::cout << "    ref_count    = " << ir1.use_count()  << "\n";
+    }
 
     std::cout << "\n=== Done ===\n";
 }

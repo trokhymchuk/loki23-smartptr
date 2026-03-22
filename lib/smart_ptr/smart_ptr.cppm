@@ -1,71 +1,101 @@
 module;
-#include <iostream>
-#include <cassert>
+
+#include <concepts>
+#include <utility>
 
 export module loki23.smart_ptr;
 
 export import loki23.smart_ptr.checking;
-export import loki23.smart_ptr.conversion;
 export import loki23.smart_ptr.ownership;
 export import loki23.smart_ptr.storage;
 
 export {
-  template <typename Tval, typename Tptr = Tval *, OwnershipPolicy<Tptr> OwnPolicy = DeepCopy<Tval, Tptr>,
-            CheckingPolicy<Tptr> CheckPolicy = NoCheck<Tval, Tptr>, ConversionPolicy<Tptr> ConvPolicy = AllowConversion,
-            StoragePolicy<Tptr> StorePolicy = DefaultStorage<Tval, Tptr>>
+  template <typename Tval,
+            typename OwnPolicy   = DeepCopy,
+            typename CheckPolicy = NoCheck,
+            template <typename> typename StorePolicy = DefaultStorage>
+    requires (!std::same_as<OwnPolicy, IntrusiveOwnership> ||
+              (IntrusiveCounted<Tval> &&
+               std::same_as<typename StorePolicy<Tval>::handle_type, Tval *>))
   class SmartPtr {
-    CheckPolicy checking_policy_;
-    ConvPolicy conversion_policy_;
-    OwnPolicy ownership_policy_;
-    StorePolicy storage_policy_;
+    using Store       = StorePolicy<Tval>;
+    using handle_type = typename Store::handle_type;
+
+    Store     storage_{};
+    OwnPolicy ownership_{};
 
     void clean() {
-      if (ownership_policy_.release(get())) {
-        delete get();
-      }
+      if (Store::is_valid(storage_.get()) && ownership_.release(storage_.get()))
+        Store::destroy(storage_.get());
     }
 
   public:
-    SmartPtr() : checking_policy_{}, conversion_policy_{}, ownership_policy_{}, storage_policy_{} {
-      checking_policy_.on_init(Tptr{});
-    }
-    SmartPtr(const Tptr ptr) : checking_policy_{}, conversion_policy_{}, ownership_policy_{}, storage_policy_{} {
-      storage_policy_.ptr_ = ptr;
-      checking_policy_.on_init(ptr);
-    }
-    SmartPtr(const SmartPtr &rhs)
-      requires Clonable<OwnPolicy, Tptr>
-        : checking_policy_{rhs.checking_policy_}, conversion_policy_{rhs.conversion_policy_},
-          ownership_policy_{rhs.ownership_policy_}, storage_policy_{} {
-      storage_policy_.set(ownership_policy_.clone(rhs.get()));
+    SmartPtr() = default;
+
+    explicit SmartPtr(handle_type h) {
+      storage_.set(h);
+      if (Store::is_valid(h))
+        ownership_.acquire(h);
+      CheckPolicy::check(Store::is_valid(h));
     }
 
-    Tval operator*() {
-      checking_policy_.on_dereference(get());
-      return get();
-    }
-    Tptr operator->() {
-      checking_policy_.on_dereference(get());
-      return get();
+    ~SmartPtr() { clean(); }
+
+    // Copy — only when OwnPolicy provides clone()
+    SmartPtr(const SmartPtr &rhs)
+        requires Clonable<OwnPolicy, handle_type>
+        : ownership_(rhs.ownership_) {
+      handle_type h = rhs.storage_.get();
+      storage_.set(h);
+      if (Store::is_valid(h))
+        ownership_.clone(h);
     }
 
     SmartPtr &operator=(const SmartPtr &rhs)
-      requires Clonable<OwnPolicy, Tptr>
+        requires Clonable<OwnPolicy, handle_type>
     {
-      clean();
-      checking_policy_ = rhs.checking_policy_;
-      conversion_policy_ = rhs.conversion_policy_;
-      ownership_policy_ = rhs.ownership_policy_;
-      storage_policy_ = rhs.storage_policy_;
-
-      storage_policy_.set(ownership_policy_.clone(rhs.get()));
-
+      if (this != &rhs) {
+        clean();
+        ownership_ = rhs.ownership_;
+        handle_type h = rhs.storage_.get();
+        storage_.set(Store::is_valid(h) ? ownership_.clone(h) : Store::null_handle());
+      }
       return *this;
     }
 
-    Tptr get() { return storage_policy_.get(); }
-    const Tptr get() const { return storage_policy_.get(); }
+    SmartPtr(SmartPtr &&rhs) noexcept
+        : storage_(std::move(rhs.storage_)), ownership_(std::move(rhs.ownership_)) {
+      rhs.storage_.set(Store::null_handle());
+    }
 
-    ~SmartPtr() { clean(); }
+    SmartPtr &operator=(SmartPtr &&rhs) noexcept {
+      if (this != &rhs) {
+        clean();
+        storage_   = std::move(rhs.storage_);
+        ownership_ = std::move(rhs.ownership_);
+        rhs.storage_.set(Store::null_handle());
+      }
+      return *this;
+    }
+
+    handle_type get() const {
+      CheckPolicy::check(valid());
+      return storage_.get();
+    }
+    bool        valid()     const noexcept { return Store::is_valid(storage_.get()); }
+    int         use_count() const noexcept { return ownership_.use_count(storage_.get()); }
+
+    Tval &operator*()
+        requires std::same_as<handle_type, Tval *>
+    {
+      CheckPolicy::check(valid());
+      return *storage_.get();
+    }
+    Tval *operator->()
+        requires std::same_as<handle_type, Tval *>
+    {
+      CheckPolicy::check(valid());
+      return storage_.get();
+    }
   };
 }

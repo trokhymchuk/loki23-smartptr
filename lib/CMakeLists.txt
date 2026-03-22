@@ -14,6 +14,6 @@ target_sources(${CMAKE_PROJECT_NAME}
     singleton/creation_policy.cppm
     singleton/lifetime_policy.cppm
     type_list.cppm
-    resource.cppm
+    smart_ptr/resource.cppm
     factory.cppm
 )

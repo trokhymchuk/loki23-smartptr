@@ -3,7 +3,7 @@
 import loki23;
 
 int main() {
-    using SmartPtr_t = SmartPtr<int, int*, RefCounted<int>>;
+    using SmartPtr_t = SmartPtr<int, RefCounted>;
     SmartPtr_t sptr{new int{5}};
     SmartPtr_t sptr_copy{sptr};
 
