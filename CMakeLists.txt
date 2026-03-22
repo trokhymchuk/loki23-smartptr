@@ -55,4 +55,4 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_subdirectory(lib)
 add_subdirectory(src)
-add_subdirectory(netprobe)
+# add_subdirectory(netprobe)

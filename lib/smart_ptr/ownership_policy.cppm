@@ -10,6 +10,39 @@ export module loki23.smart_ptr.ownership;
 
 export {
 
+  // ============================================================
+  // Base class for ref-counted ownership (shared by RefCounted
+  // and resource::SharedOwnership)
+  // ============================================================
+
+  class RefCountBase {
+  protected:
+    std::size_t *count_;
+
+    explicit RefCountBase(std::nullptr_t) noexcept : count_(nullptr) {}
+
+    RefCountBase(const RefCountBase &rhs) noexcept : count_(rhs.count_) {}
+    RefCountBase &operator=(const RefCountBase &rhs) noexcept { count_ = rhs.count_; return *this; }
+
+    RefCountBase(RefCountBase &&rhs) noexcept : count_(rhs.count_) { rhs.count_ = nullptr; }
+    RefCountBase &operator=(RefCountBase &&rhs) noexcept {
+      count_ = rhs.count_; rhs.count_ = nullptr; return *this;
+    }
+
+    void alloc_count() { count_ = new std::size_t{1}; assert(count_); }
+
+    void inc_count() noexcept { if (count_) ++(*count_); }
+
+    bool dec_count() noexcept {
+      if (!count_) return false;
+      if (!--*count_) { delete count_; count_ = nullptr; return true; }
+      return false;
+    }
+
+  public:
+    std::size_t use_count() const noexcept { return count_ ? *count_ : 0; }
+  };
+
   // optional
   template <typename Policy, typename Tptr>
   concept Clonable = requires(Policy policy, Tptr ptr) {
@@ -32,26 +65,17 @@ export {
   };
 
   // Policies:
-  template <typename Tval, typename Tptr = Tval *> class RefCounted {
-    std::size_t *count_;
-
+  template <typename Tval, typename Tptr = Tval *>
+  class RefCounted : public RefCountBase {
   public:
-    RefCounted() : count_{new std::size_t{1}} { assert(count_); }
+    RefCounted() : RefCountBase(nullptr) { alloc_count(); }
 
-    RefCounted(const RefCounted &rhs) : count_(rhs.count_) {}
+    RefCounted(const RefCounted &rhs) : RefCountBase(rhs) {}
+    RefCounted &operator=(const RefCounted &) = default;
 
-    Tptr clone(const Tptr &val) {
-      ++(*count_);
-      return val;
-    }
+    Tptr clone(const Tptr &val) { inc_count(); return val; }
 
-    bool release(const Tptr &) {
-      if (!--*count_) {
-        delete count_;
-        return true;
-      }
-      return false;
-    }
+    bool release(const Tptr &) { return dec_count(); }
   };
 
   template <typename Tval, typename Tptr = Tval *> class RefLinked {
