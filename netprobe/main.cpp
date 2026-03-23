@@ -1,81 +1,55 @@
+import loki23;
+import loki23.factory;
+
 #include <chrono>
 #include <iostream>
+#include <string>
 #include <thread>
-#include <IPv4Layer.h>
-#include <Packet.h>
 
-#include "packets.hpp"
 #include "listener.hpp"
-#include "capturer.hpp"
+#include "statistics_listener.hpp"
+#include "smart_listener.hpp"
+#include "live_capturer.hpp"
+#include "pcap_file_capturer.hpp"
 
-import loki23;
-
-using Capturer = SingletonHolder<PacketCapturer>;
+using Listeners = type_list<PacketLogger, StatisticsListener, SmartListener>;
+using Capturers = type_list<LiveCapturer, PcapFileCapturer>;
 
 int main(int argc, char* argv[]) {
-    // ── Register listeners before opening the interface ──────────────────────
-    PacketLogger logger;
-    Capturer::instance().add_listener(&logger);
+  HierarchyFactory<PacketListener, Listeners> listener_factory;
+  SmartPtr<PacketListener, NoCopy> logger    {Field<PacketLogger>        (listener_factory).create().release()};
+  SmartPtr<PacketListener, NoCopy> stats     {Field<StatisticsListener>  (listener_factory).create().release()};
+  SmartPtr<PacketListener, NoCopy> smart     {Field<SmartListener>       (listener_factory).create().release()};
 
-    // ── Open interface and start live capture ────────────────────────────────
-    // Pass an interface name as the first argument, or omit for the default.
-    const std::string iface = (argc > 1) ? argv[1] : "";
-    Capturer::instance().open(iface);
-    std::cout << "Capturing on " << Capturer::instance().interface_name()
-              << " for 5 seconds...\n";
+  HierarchyFactory<PacketCapturer, Capturers> capturer_factory;
+  SmartPtr<PacketCapturer, NoCopy> capturer;
+  bool is_live = true;
 
+  if (argc >= 3 && std::string{argv[1]} == "-f") {
+    capturer = SmartPtr<PacketCapturer, NoCopy>{Field<PcapFileCapturer>(capturer_factory).create().release()};
+    is_live  = false;
+  } else {
+    capturer = SmartPtr<PacketCapturer, NoCopy>{Field<LiveCapturer>(capturer_factory).create().release()};
+  }
+
+//   capturer->add_listener(logger.get());
+  capturer->add_listener(stats.get());
+  capturer->add_listener(smart.get());
+
+  if (is_live) {
+    const std::string iface =
+        (argc >= 3 && std::string{argv[1]} == "-i") ? argv[2] : "";
+    capturer->open(iface);
+
+    auto* live = static_cast<LiveCapturer*>(capturer.get());
+    std::cout << "Capturing on " << live->interface_name() << " for 50 seconds...\n";
     std::this_thread::sleep_for(std::chrono::seconds{50});
+    capturer->close();
+  } else {
+    capturer->open(argv[2]);
+  }
 
-    Capturer::instance().close();
-    std::cout << "Capture done.\n\n";
-
-    // ── Manual dispatch — show the listener works without live capture too ───
-    std::cout << "--- synthetic packets ---\n";
-
-    // ── TcpPacket ────────────────────────────────────────────────────────────
-    TcpPacket tcp;
-    tcp.src_ip      = "192.168.1.10";
-    tcp.dst_ip      = "93.184.216.34";
-    tcp.size        = 60;
-    tcp.timestamp   = std::chrono::system_clock::now();
-    tcp.src_port    = 54321;
-    tcp.dst_port    = 443;
-    tcp.seq_num     = 1000;
-    tcp.ack_num     = 0;
-    tcp.syn         = true;
-    tcp.window_size = 65535;
-    Capturer::instance().dispatch(tcp);
-
-    // ── HttpPacket ───────────────────────────────────────────────────────────
-    HttpPacket http;
-    http.src_ip       = "192.168.1.10";
-    http.dst_ip       = "93.184.216.34";
-    http.size         = 380;
-    http.timestamp    = std::chrono::system_clock::now();
-    http.src_port     = 54322;
-    http.dst_port     = 80;
-    http.seq_num      = 2000;
-    http.ack          = true;
-    http.psh          = true;
-    http.method       = "GET";
-    http.url          = "/index.html";
-    http.http_version = "HTTP/1.1";
-    http.host         = "example.com";
-    http.headers["Accept"] = "text/html";
-    Capturer::instance().dispatch(http);
-
-    // ── DnsPacket ────────────────────────────────────────────────────────────
-    DnsPacket dns;
-    dns.src_ip      = "192.168.1.10";
-    dns.dst_ip      = "8.8.8.8";
-    dns.size        = 64;
-    dns.timestamp   = std::chrono::system_clock::now();
-    dns.query_id    = 0xABCD;
-    dns.domain      = "example.com";
-    dns.record_type = "A";
-    dns.is_response = true;
-    dns.answers     = {"93.184.216.34"};
-    Capturer::instance().dispatch(dns);
-
-    Capturer::instance().remove_listener(&logger);
+  static_cast<StatisticsListener*>(stats.get())->print_report(std::cout);
+  std::cout << "Capture done.\n";
+  return 0;
 }

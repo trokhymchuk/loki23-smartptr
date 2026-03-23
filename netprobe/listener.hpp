@@ -1,31 +1,25 @@
 #pragma once
 
 #include <iostream>
+#include <string_view>
+
 #include "packets.hpp"
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Listener interface — override only the packet types you care about.
-// The capturer resolves the concrete type before calling these.
-// ─────────────────────────────────────────────────────────────────────────────
-struct IPacketListener {
-    virtual ~IPacketListener() = default;
+struct PacketListener {
+  virtual ~PacketListener() = default;
 
-    virtual void on_tcp (const TcpPacket&)  {}
-    virtual void on_http(const HttpPacket&) {}
-    virtual void on_dns (const DnsPacket&)  {}
+  virtual void on_packet    (const NetPacket&)                   {}
+  virtual void on_packet_seq(const NetPacket&, const NetPacket&) {}
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PacketLogger — prints every packet with its resolved type prefix
-// ─────────────────────────────────────────────────────────────────────────────
-struct PacketLogger : IPacketListener {
-    void on_tcp(const TcpPacket& p) override {
-        std::cout << "[TCP]  " << p << "\n";
-    }
-    void on_http(const HttpPacket& p) override {
-        std::cout << "[HTTP] " << p << "\n";
-    }
-    void on_dns(const DnsPacket& p) override {
-        std::cout << "[DNS]  " << p << "\n";
-    }
+struct PacketLogger : PacketListener {
+  static constexpr std::string_view type_name = "PacketLogger";
+
+  void on_packet(const NetPacket& p) override {
+    std::cout << p << "\n";
+  }
+
+  void on_packet_seq(const NetPacket& a, const NetPacket& b) override {
+    std::cout << a << "\n" << b << "\n";
+  }
 };
