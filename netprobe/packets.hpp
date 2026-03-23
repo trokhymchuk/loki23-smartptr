@@ -17,6 +17,7 @@
 #include <Packet.h>
 #include <RawPacket.h>
 #include <TcpLayer.h>
+#include <UdpLayer.h>
 
 struct NetPacket {
     std::string src_ip;
@@ -269,5 +270,38 @@ private:
 };
 
 inline std::ostream& operator<<(std::ostream& os, const DnsPacket& p) {
+    return os << p.to_string();
+}
+
+struct UdpPacket : NetPacket {
+    uint16_t src_port = 0;
+    uint16_t dst_port = 0;
+
+    UdpPacket() = default;
+
+    explicit UdpPacket(const pcpp::Packet& parsed, pcpp::RawPacket* raw) {
+        auto* ipv4 = parsed.getLayerOfType<pcpp::IPv4Layer>();
+        auto* udp  = parsed.getLayerOfType<pcpp::UdpLayer>();
+        if (!ipv4 || !udp)
+            throw std::invalid_argument{"not an IPv4/UDP packet"};
+
+        fill_base(ipv4, raw);
+        src_port = udp->getSrcPort();
+        dst_port = udp->getDstPort();
+    }
+
+    std::string type_name() const override { return "UDP"; }
+
+    NetPacket* deep_copy() const override { return new UdpPacket(*this); }
+
+    std::string to_string() const override {
+        std::ostringstream os;
+        os << NetPacket::to_string() << "\n"
+           << "        ports: " << src_port << " -> " << dst_port;
+        return os.str();
+    }
+};
+
+inline std::ostream& operator<<(std::ostream& os, const UdpPacket& p) {
     return os << p.to_string();
 }

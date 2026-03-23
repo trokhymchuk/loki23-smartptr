@@ -48,6 +48,7 @@ protected:
     try { return new DnsPacket{parsed, raw};  } catch (const std::invalid_argument &) {}
     try { return new HttpPacket{parsed, raw}; } catch (const std::invalid_argument &) {}
     try { return new TcpPacket{parsed, raw};  } catch (const std::invalid_argument &) {}
+    try { return new UdpPacket{parsed, raw};  } catch (const std::invalid_argument &) {}
     return nullptr;
   }
 

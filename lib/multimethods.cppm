@@ -124,7 +124,7 @@ struct StaticDispatcherExecutor<DispatchPolicy::FIRST_MATCH, BaseLhs, BaseRhs, E
                           return 0;
                         }()));
               }
-              return 0;
+              return false;
             }()));
   }
 };

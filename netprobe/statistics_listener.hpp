@@ -35,9 +35,15 @@ struct StatisticsListener : PacketListener {
     std::unordered_map<std::string, uint64_t> domains;
   };
 
+  struct UdpStats {
+    uint64_t packets = 0;
+    uint64_t bytes   = 0;
+  };
+
   TcpStats  tcp{};
   HttpStats http{};
   DnsStats  dns{};
+  UdpStats  udp{};
 
   void on_packet(const NetPacket& p) override {
     if (auto* h = dynamic_cast<const HttpPacket*>(&p)) {
@@ -55,6 +61,9 @@ struct StatisticsListener : PacketListener {
       if (t->syn) ++tcp.syn;
       if (t->fin) ++tcp.fin;
       if (t->rst) ++tcp.rst;
+    } else if (auto* u = dynamic_cast<const UdpPacket*>(&p)) {
+      ++udp.packets;
+      udp.bytes += p.size;
     } else if (auto* d = dynamic_cast<const DnsPacket*>(&p)) {
       dns.bytes += p.size;
       if (d->is_response) ++dns.responses;
@@ -76,6 +85,8 @@ struct StatisticsListener : PacketListener {
       os << "        method " << m << ": " << n << "\n";
     for (auto& [c, n] : http.status_codes)
       os << "        status " << c << ": " << n << "\n";
+
+    os << "UDP   packets=" << udp.packets << "  bytes=" << udp.bytes << "\n";
 
     os << "DNS   queries=" << dns.queries << "  responses=" << dns.responses
        << "  bytes=" << dns.bytes << "\n";
