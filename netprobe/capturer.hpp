@@ -34,12 +34,9 @@ public:
   }
 
   void dispatch(const NetPacket &pkt) {
+    SmartPtr<NetPacket, RefCountedMT> shared{pkt.deep_copy()};
     for (auto *l : listeners_)
-      l->on_packet(pkt);
-    if (last_packet_.valid())
-      for (auto *l : listeners_)
-        l->on_packet_seq(*last_packet_, pkt);
-    last_packet_ = SmartPtr<NetPacket, NoCopy>{pkt.deep_copy()};
+      l->push(shared);
   }
 
 protected:
@@ -52,6 +49,5 @@ protected:
     return nullptr;
   }
 
-  std::vector<PacketListener *>    listeners_;
-  SmartPtr<NetPacket, NoCopy>      last_packet_;
+  std::vector<PacketListener *> listeners_;
 };

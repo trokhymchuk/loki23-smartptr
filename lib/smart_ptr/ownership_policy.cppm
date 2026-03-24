@@ -1,5 +1,6 @@
 module;
 
+#include <atomic>
 #include <cassert>
 #include <cstddef>
 #include <list>
@@ -82,6 +83,62 @@ export {
     template <typename Tptr>
     int use_count(const Tptr &) const noexcept {
       return static_cast<int>(RefCountBase::use_count());
+    }
+  };
+
+  // Thread-safe ref-counted base — atomic heap-allocated counter
+  class AtomicRefCountBase {
+  protected:
+    std::atomic<std::size_t> *count_;
+
+    explicit AtomicRefCountBase(std::nullptr_t) noexcept : count_(nullptr) {}
+
+    AtomicRefCountBase(const AtomicRefCountBase &rhs) noexcept : count_(rhs.count_) {}
+    AtomicRefCountBase &operator=(const AtomicRefCountBase &rhs) noexcept { count_ = rhs.count_; return *this; }
+
+    AtomicRefCountBase(AtomicRefCountBase &&rhs) noexcept : count_(rhs.count_) { rhs.count_ = nullptr; }
+    AtomicRefCountBase &operator=(AtomicRefCountBase &&rhs) noexcept {
+      count_ = rhs.count_; rhs.count_ = nullptr; return *this;
+    }
+
+    void alloc_count() { count_ = new std::atomic<std::size_t>{1}; assert(count_); }
+
+    void inc_count() noexcept {
+      if (count_) count_->fetch_add(1, std::memory_order_relaxed);
+    }
+
+    bool dec_count() noexcept {
+      if (!count_) return false;
+      if (count_->fetch_sub(1, std::memory_order_acq_rel) == 1) {
+        delete count_; count_ = nullptr; return true;
+      }
+      return false;
+    }
+
+  public:
+    std::size_t use_count() const noexcept {
+      return count_ ? count_->load(std::memory_order_relaxed) : 0;
+    }
+  };
+
+  // Thread-safe ref-counted — shared ownership via atomic heap-allocated counter
+  struct RefCountedMT : AtomicRefCountBase {
+    RefCountedMT() : AtomicRefCountBase(nullptr) {}
+    RefCountedMT(const RefCountedMT &rhs) : AtomicRefCountBase(rhs) {}
+    RefCountedMT &operator=(const RefCountedMT &) = default;
+
+    template <typename Tptr>
+    void acquire(const Tptr &) { alloc_count(); }
+
+    template <typename Tptr>
+    Tptr clone(const Tptr &h) { inc_count(); return h; }
+
+    template <typename Tptr>
+    bool release(const Tptr &) { return dec_count(); }
+
+    template <typename Tptr>
+    int use_count(const Tptr &) const noexcept {
+      return static_cast<int>(AtomicRefCountBase::use_count());
     }
   };
 

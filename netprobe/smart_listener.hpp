@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <iostream>
 #include <string>
 #include <string_view>
@@ -12,39 +13,44 @@
 struct SmartListener : PacketListener {
   static constexpr std::string_view type_name = "SmartListener";
 
-  void on_packet(const NetPacket& p) override {
-    if (auto* d = dynamic_cast<const DnsPacket*>(&p)) {
-      if (d->is_response && !d->domain.empty())
-        for (const auto& ip : d->answers)
-          ip_to_domain_[ip] = d->domain;
-      return;
-    }
+  ~SmartListener() { stop(); }
 
-    if (auto* h = dynamic_cast<const HttpPacket*>(&p)) {
-      if (!h->is_response)
-        note_connection("HTTP", h->dst_ip, h->dst_port, h->host.empty() ? "" : h->host);
-      return;
-    }
-
-    if (auto* t = dynamic_cast<const TcpPacket*>(&p)) {
-      if (t->syn && !t->ack)
-        note_connection("TCP", t->dst_ip, t->dst_port, "");
-    }
+  SmartListener() {
+    dispatcher_.add(std::function<void(const DnsPacket&)>{
+        [this](const DnsPacket& d) {
+          if (d.is_response && !d.domain.empty())
+            for (const auto& ip : d.answers)
+              ip_to_domain_[ip] = d.domain;
+        }});
+    dispatcher_.add(std::function<void(const HttpPacket&)>{
+        [this](const HttpPacket& h) {
+          if (!h.is_response)
+            note_connection("HTTP", h.dst_ip, h.dst_port, h.host.empty() ? "" : h.host);
+        }});
+    dispatcher_.add(std::function<void(const TcpPacket&)>{
+        [this](const TcpPacket& t) {
+          if (t.syn && !t.ack)
+            note_connection("TCP", t.dst_ip, t.dst_port, "");
+        }});
   }
 
-  void on_packet_seq(const NetPacket& a, const NetPacket& b) override {
-    using Dispatcher = StaticDispatcher<DispatchPolicy::FIRST_MATCH, NoOpNoMatchPolicy,
-                                        NetPacket, NetPacket, std::tuple<void>,
-                                        DnsPacket, HttpPacket, TcpPacket, UdpPacket>;
-    Dispatcher::dispatch(
-        const_cast<NetPacket*>(&a),
-        const_cast<NetPacket*>(&b),
-        std::make_tuple(
-            [this](DnsPacket* dns, HttpPacket* h) { check_dns_connection(dns, h->dst_ip, h->dst_port); },
-            [this](DnsPacket* dns, TcpPacket*  t) { check_dns_connection(dns, t->dst_ip,  t->dst_port); },
-            [this](DnsPacket* dns, UdpPacket*  u) { check_dns_connection(dns, u->dst_ip,  u->dst_port); }
-        )
-    );
+  void on_packet(const NetPacket& p) override {
+    dispatcher_.dispatch(p);
+
+    if (last_packet_.valid()) {
+      using SeqDispatcher = StaticDispatcher<DispatchPolicy::FIRST_MATCH, NoOpNoMatchPolicy,
+                                             NetPacket, NetPacket, std::tuple<void>,
+                                             DnsPacket, HttpPacket, TcpPacket, UdpPacket>;
+      SeqDispatcher::dispatch(
+          const_cast<NetPacket*>(&*last_packet_),
+          const_cast<NetPacket*>(&p),
+          std::make_tuple(
+              [this](DnsPacket* dns, HttpPacket* h) { check_dns_connection(dns, h->dst_ip, h->dst_port); },
+              [this](DnsPacket* dns, TcpPacket*  t) { check_dns_connection(dns, t->dst_ip,  t->dst_port); },
+              [this](DnsPacket* dns, UdpPacket*  u) { check_dns_connection(dns, u->dst_ip,  u->dst_port); }
+          )
+      );
+    }
   }
 
 private:
@@ -74,6 +80,9 @@ private:
               << " (" << proto << " -> " << dst_ip << ":" << dst_port << ")\n";
   }
 
+  using PacketDispatcher = DynamicDispatcher<DispatchPolicy::FIRST_MATCH, NoOpNoMatchPolicy, const NetPacket&>;
+
+  PacketDispatcher                             dispatcher_;
   std::unordered_map<std::string, std::string> ip_to_domain_;
   std::unordered_set<std::string>              reported_;
 };

@@ -1,7 +1,6 @@
 module;
 
 #include <functional>
-#include <memory>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -17,19 +16,19 @@ concept HasTypeName = requires {
 
 export template <typename Policy, typename Base, typename Derived>
 concept FactoryCreationPolicy = requires {
-    { Policy::template create<Base, Derived>() } -> std::same_as<std::unique_ptr<Base>>;
+    { Policy::template create<Base, Derived>() } -> std::same_as<SmartPtr<Base, NoCopy>>;
 };
 
 export struct NewCreation {
     template <typename Base, typename Derived>
-    static std::unique_ptr<Base> create() {
-        return std::make_unique<Derived>();
+    static SmartPtr<Base, NoCopy> create() {
+        return SmartPtr<Base, NoCopy>{new Derived()};
     }
 };
 
 export struct FactoryMethodCreation {
     template <typename Base, typename Derived>
-    static std::unique_ptr<Base> create() {
+    static SmartPtr<Base, NoCopy> create() {
         return Derived::create();
     }
 };
@@ -42,7 +41,7 @@ export template <typename Base, typename... Types, typename CreationPolicy>
     requires(HasTypeName<Types> && ...) &&
             (FactoryCreationPolicy<CreationPolicy, Base, Types> && ...)
 class Factory<Base, type_list<Types...>, CreationPolicy> {
-    using Creator = std::function<std::unique_ptr<Base>()>;
+    using Creator = std::function<SmartPtr<Base, NoCopy>()>;
     std::unordered_map<std::string_view, Creator> m_registry;
 
   public:
@@ -52,7 +51,7 @@ class Factory<Base, type_list<Types...>, CreationPolicy> {
          ...);
     }
 
-    std::unique_ptr<Base> create(std::string_view name) const {
+    SmartPtr<Base, NoCopy> create(std::string_view name) const {
         auto it = m_registry.find(name);
         if (it == m_registry.end())
             throw std::invalid_argument("Factory: unknown type '" +
@@ -70,7 +69,7 @@ export template <typename Base, typename CreationPolicy>
 struct MakeUnit {
     template <typename T>
     struct Unit {
-        std::unique_ptr<Base> create() {
+        SmartPtr<Base, NoCopy> create() {
             return CreationPolicy::template create<Base, T>();
         }
     };

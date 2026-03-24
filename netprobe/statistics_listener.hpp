@@ -11,6 +11,8 @@
 struct StatisticsListener : PacketListener {
   static constexpr std::string_view type_name = "StatisticsListener";
 
+  ~StatisticsListener() { stop(); }
+
   struct TcpStats {
     uint64_t packets = 0;
     uint64_t bytes   = 0;
