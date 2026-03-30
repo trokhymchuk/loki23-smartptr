@@ -170,8 +170,9 @@ struct Logger {
 
 struct DB {
   Logger &logger;
-  DB(Logger &logger) : logger(logger) {
-    std::cout << "DB created\n";
+  int port;
+  DB(Logger &logger, int port) : logger(logger), port(port) {
+    std::cout << "DB created on port " << port << '\n';
     logger.log("DB connected");
   }
 };
@@ -186,15 +187,15 @@ struct UserService {
 };
 
 int main() {
-  GenScatterHierarchy<LazyHolder, type_list<Logger, DB, UserService>> container;
+  // Types listed in dependency order: deps before dependents
+  Container<Logger, DB, UserService> container;
 
-  Field<Logger>(container).bind();
-  Field<DB>(container).bind(dep(Field<Logger>(container)));
-  Field<UserService>(container).bind(dep(Field<DB>(container)),
-                                     dep(Field<Logger>(container)));
+  container.bind<Logger>();
+  container.bind<DB>(From<Logger>{}, 5432);
+  container.bind<UserService>(From<DB>{}, From<Logger>{});
 
   // Nothing constructed yet — resolves the full graph here:
-  UserService &svc = Field<UserService>(container).get();
+  UserService &svc = container.get<UserService>();
   svc.logger.log("done");
 }
 

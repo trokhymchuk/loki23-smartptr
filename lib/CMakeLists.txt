@@ -4,6 +4,7 @@ target_sources(${CMAKE_PROJECT_NAME}
   FILE_SET CXX_MODULES FILES
     loki23.cppm
     hierarchy.cppm
+    di.cppm
     multimethods.cppm
     smart_ptr/smart_ptr.cppm
     smart_ptr/checking_policy.cppm
