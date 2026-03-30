@@ -5,9 +5,6 @@
 
 import loki23.smart_ptr.resource;
 
-// ============================================================
-// Intrusive reference-counted base
-// ============================================================
 struct IntrusiveBase {
     void add_ref()  noexcept { ++m_refs; }
     int  release()  noexcept { return --m_refs; }
@@ -21,11 +18,6 @@ struct SensorData : IntrusiveBase {
     double pressure{};
     SensorData(double t, double p) : temperature(t), pressure(p) {}
 };
-
-// ============================================================
-// Type aliases — behaviour defined entirely by policy selection.
-// SmartPtr replaces both the old SmartPtr and Resource classes.
-// ============================================================
 
 // Fast path: unique ownership, no runtime checks, heap pointer
 using FastResource    = SmartPtr<int,        UniqueOwnership,   NoCheck,        DefaultStorage>;

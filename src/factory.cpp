@@ -5,38 +5,38 @@
 import loki23;
 import loki23.factory;
 
-struct IShape {
+struct Shape {
     virtual std::string describe() const = 0;
-    virtual std::unique_ptr<IShape> clone() const = 0;
-    virtual ~IShape() = default;
+    virtual std::unique_ptr<Shape> clone() const = 0;
+    virtual ~Shape() = default;
 };
 
-struct Circle : IShape {
+struct Circle : Shape {
     static constexpr std::string_view type_name = "Circle";
     std::string describe() const override { return "Circle (r=1)"; }
-    std::unique_ptr<IShape> clone()    const override { return std::make_unique<Circle>(*this); }
-    static std::unique_ptr<IShape>  create() { return std::make_unique<Circle>(); }
+    std::unique_ptr<Shape> clone()    const override { return std::make_unique<Circle>(*this); }
+    static std::unique_ptr<Shape>  create() { return std::make_unique<Circle>(); }
 };
 
-struct Square : IShape {
+struct Square : Shape {
     static constexpr std::string_view type_name = "Square";
     std::string describe() const override { return "Square (side=1)"; }
-    std::unique_ptr<IShape> clone()    const override { return std::make_unique<Square>(*this); }
-    static std::unique_ptr<IShape>  create() { return std::make_unique<Square>(); }
+    std::unique_ptr<Shape> clone()    const override { return std::make_unique<Square>(*this); }
+    static std::unique_ptr<Shape>  create() { return std::make_unique<Square>(); }
 };
 
-struct Triangle : IShape {
+struct Triangle : Shape {
     static constexpr std::string_view type_name = "Triangle";
     std::string describe() const override { return "Triangle (equilateral)"; }
-    std::unique_ptr<IShape> clone()    const override { return std::make_unique<Triangle>(*this); }
-    static std::unique_ptr<IShape>  create() { return std::make_unique<Triangle>(); }
+    std::unique_ptr<Shape> clone()    const override { return std::make_unique<Triangle>(*this); }
+    static std::unique_ptr<Shape>  create() { return std::make_unique<Triangle>(); }
 };
 
-struct Pentagon : IShape {
+struct Pentagon : Shape {
     static constexpr std::string_view type_name = "Pentagon";
     std::string describe() const override { return "Pentagon (regular)"; }
-    std::unique_ptr<IShape> clone()    const override { return std::make_unique<Pentagon>(*this); }
-    static std::unique_ptr<IShape>  create() { return std::make_unique<Pentagon>(); }
+    std::unique_ptr<Shape> clone()    const override { return std::make_unique<Pentagon>(*this); }
+    static std::unique_ptr<Shape>  create() { return std::make_unique<Pentagon>(); }
 };
 
 using Shapes = type_list<Circle, Square, Triangle, Pentagon>;
@@ -46,7 +46,7 @@ int main() {
 
     std::cout << "[1] Factory<NewCreation>  (default)\n";
     {
-        Factory<IShape, Shapes> factory;
+        Factory<Shape, Shapes> factory;
 
         for (std::string_view name : {"Circle", "Square", "Triangle", "Pentagon"}) {
             auto obj = factory.create(name);
@@ -62,7 +62,7 @@ int main() {
 
     std::cout << "\n[2] Factory<FactoryMethodCreation>\n";
     {
-        Factory<IShape, Shapes, FactoryMethodCreation> factory;
+        Factory<Shape, Shapes, FactoryMethodCreation> factory;
 
         for (std::string_view name : {"Circle", "Square", "Triangle", "Pentagon"}) {
             auto obj = factory.create(name);
@@ -72,7 +72,7 @@ int main() {
 
     std::cout << "\n[3] HierarchyFactory  (compile-time, no map)\n";
     {
-        HierarchyFactory<IShape, Shapes> factory;
+        HierarchyFactory<Shape, Shapes> factory;
 
         auto c = Field<Circle>  (factory).create();
         auto s = Field<Square>  (factory).create();

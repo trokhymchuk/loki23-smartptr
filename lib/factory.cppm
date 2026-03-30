@@ -29,7 +29,7 @@ export struct NewCreation {
 export struct FactoryMethodCreation {
     template <typename Base, typename Derived>
     static SmartPtr<Base, NoCopy> create() {
-        return Derived::create();
+        return SmartPtr<Base, NoCopy>{Derived::create().release()};
     }
 };
 

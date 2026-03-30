@@ -32,7 +32,7 @@ int main(int argc, char *argv[]) {
     capturer = Field<LiveCapturer>(capturer_factory).create();
   }
 
-  capturer->add_listener(logger.get());
+  // capturer->add_listener(logger.get());
   capturer->add_listener(stats.get());
   capturer->add_listener(smart.get());
 
