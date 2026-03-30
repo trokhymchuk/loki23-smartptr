@@ -37,11 +37,25 @@ export {
     bool is_initialized() { return initialized; }
   };
 
+  template <typename T>
+  struct Dep {
+    Holder<T> &holder;
+  };
+
+  template <typename T>
+  Dep<T> dep(Holder<T> &h) { return {h}; }
+
+  template <typename T>
+  T &unwrap(Dep<T> d) { return d.holder.get(); }
+
+  template <typename T>
+  decltype(auto) unwrap(T &&v) { return std::forward<T>(v); }
+
   template <typename T> struct LazyHolder : Holder<T> {
     std::function<void(T *)> creator;
 
     template <typename... E> void bind(E... args) {
-      creator = [=](T *where) { new (where) T{args...}; };
+      creator = [=](T *where) { new (where) T{unwrap(args)...}; };
     }
 
     T &get() override {

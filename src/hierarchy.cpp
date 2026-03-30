@@ -1,6 +1,5 @@
 #include <concepts>
 #include <initializer_list>
-#include <iostream>
 #include <string>
 
 import loki23;
@@ -109,7 +108,7 @@ int main() {
 
 #endif
 
-#if 1
+#if 0
 
 struct Base {
   virtual ~Base() = default;
@@ -156,6 +155,47 @@ int main() {
 
   delete b;
   delete a;
+}
+
+#endif
+
+#if 1
+
+#include <iostream>
+
+struct Logger {
+  Logger() { std::cout << "Logger created\n"; }
+  void log(const std::string &msg) { std::cout << "[LOG] " << msg << '\n'; }
+};
+
+struct DB {
+  Logger &logger;
+  DB(Logger &logger) : logger(logger) {
+    std::cout << "DB created\n";
+    logger.log("DB connected");
+  }
+};
+
+struct UserService {
+  DB &db;
+  Logger &logger;
+  UserService(DB &db, Logger &logger) : db(db), logger(logger) {
+    std::cout << "UserService created\n";
+    logger.log("UserService ready");
+  }
+};
+
+int main() {
+  GenScatterHierarchy<LazyHolder, type_list<Logger, DB, UserService>> container;
+
+  Field<Logger>(container).bind();
+  Field<DB>(container).bind(dep(Field<Logger>(container)));
+  Field<UserService>(container).bind(dep(Field<DB>(container)),
+                                     dep(Field<Logger>(container)));
+
+  // Nothing constructed yet — resolves the full graph here:
+  UserService &svc = Field<UserService>(container).get();
+  svc.logger.log("done");
 }
 
 #endif
