@@ -102,6 +102,9 @@ export {
 }
 
 export {
+  template <typename T>
+  struct From {};
+
   template <template <typename> typename Unit, typename T>
   struct GenLinearHierarchy;
 

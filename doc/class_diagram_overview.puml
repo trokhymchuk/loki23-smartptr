@@ -1,0 +1,51 @@
+@startuml loki23_overview
+
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam defaultFontSize 13
+skinparam linetype ortho
+
+package "type_list" {
+  class type_list<Ts...>
+}
+
+package "hierarchy" {
+  class GenScatterHierarchy<Unit, TL>
+  class GenLinearHierarchy<Unit, TL>
+  class Holder<T>
+  class LazyHolder<T>
+  class DefaultHolder<T>
+  LazyHolder --|> Holder
+  DefaultHolder --|> Holder
+}
+
+package "smart_ptr" {
+  class SmartPtr<T, OwnPolicy, CheckPolicy, StorePolicy>
+}
+
+package "singleton" {
+  class SingletonHolder<T, CreationPol, LifetimePol>
+}
+
+package "di" {
+  class Container<Ts...>
+}
+
+package "factory" {
+  class Factory<Base, Types, CreationPol>
+}
+
+package "multimethods" {
+  class StaticDispatcher<DispatchPol, NoMatchPol, BaseLhs, BaseRhs, Ts...>
+  class DynamicDispatcher<DispatchPol, NoMatchPol, Args...>
+}
+
+Container --|> GenLinearHierarchy : extends
+Container ..> LazyHolder : uses
+Factory --|> GenScatterHierarchy : HierarchyFactory extends
+Factory ..> SmartPtr : returns
+SmartPtr ..> type_list : policy lookup
+GenScatterHierarchy ..> type_list : iterates
+GenLinearHierarchy ..> type_list : iterates
+
+@enduml

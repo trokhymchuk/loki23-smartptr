@@ -1,5 +1,3 @@
-#include <concepts>
-#include <initializer_list>
 #include <string>
 
 import loki23;
@@ -188,14 +186,14 @@ struct UserService {
 
 int main() {
   // Types listed in dependency order: deps before dependents
-  Container<Logger, DB, UserService> container;
+  Container<Logger, DB, UserService> hierarchy;
 
-  container.bind<Logger>();
-  container.bind<DB>(From<Logger>{}, 5432);
-  container.bind<UserService>(From<DB>{}, From<Logger>{});
+  hierarchy.bind<Logger>();
+  hierarchy.bind<DB>(From<Logger>{}, 5432);
+  hierarchy.bind<UserService>(From<DB>{}, From<Logger>{});
 
   // Nothing constructed yet — resolves the full graph here:
-  UserService &svc = container.get<UserService>();
+  UserService &svc = hierarchy.get<UserService>();
   svc.logger.log("done");
 }
 

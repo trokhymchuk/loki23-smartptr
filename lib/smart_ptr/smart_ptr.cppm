@@ -6,6 +6,7 @@ module;
 export module loki23.smart_ptr;
 
 export import loki23.smart_ptr.checking;
+export import loki23.smart_ptr.conversion;
 export import loki23.smart_ptr.ownership;
 export import loki23.smart_ptr.storage;
 
@@ -13,10 +14,12 @@ export {
   template <typename Tval,
             typename OwnPolicy   = DeepCopy,
             typename CheckPolicy = NoCheck,
-            template <typename> typename StorePolicy = DefaultStorage>
-    requires (!std::same_as<OwnPolicy, IntrusiveOwnership> ||
-              (IntrusiveCounted<Tval> &&
-               std::same_as<typename StorePolicy<Tval>::handle_type, Tval *>))
+            template <typename> typename StorePolicy = DefaultStorage,
+            typename ConvPolicy  = DisallowConversion>
+    requires ((!std::same_as<OwnPolicy, IntrusiveOwnership> ||
+               (IntrusiveCounted<Tval> &&
+                std::same_as<typename StorePolicy<Tval>::handle_type, Tval *>)) &&
+              ConversionPolicy<ConvPolicy, typename StorePolicy<Tval>::handle_type>)
   class SmartPtr {
     using Store       = StorePolicy<Tval>;
     using handle_type = typename Store::handle_type;
@@ -46,9 +49,9 @@ export {
         requires Clonable<OwnPolicy, handle_type>
         : ownership_(rhs.ownership_) {
       handle_type h = rhs.storage_.get();
-      storage_.set(h);
-      if (Store::is_valid(h))
-        ownership_.clone(h);
+      // clone() may return the same handle (RefCounted) or a new one (DeepCopy);
+      // always use the returned handle, never the raw rhs handle.
+      storage_.set(Store::is_valid(h) ? ownership_.clone(h) : Store::null_handle());
     }
 
     SmartPtr &operator=(const SmartPtr &rhs)
@@ -79,6 +82,11 @@ export {
     }
 
     handle_type get() const {
+      CheckPolicy::check(valid());
+      return storage_.get();
+    }
+
+    operator handle_type() const requires (ConvPolicy::implicit_convert()) {
       CheckPolicy::check(valid());
       return storage_.get();
     }
