@@ -83,8 +83,6 @@ int main() {
         std::cout << "    " << s->describe() << "\n";
         std::cout << "    " << t->describe() << "\n";
         std::cout << "    " << p->describe() << "\n";
-
-        // Field<Hexagon>(factory) // error
     }
 
     std::cout << "\n=== Done ===\n";

@@ -55,4 +55,6 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_subdirectory(lib)
 add_subdirectory(src)
-add_subdirectory(netprobe)
+if(NOT WIN32)
+  add_subdirectory(netprobe)
+endif()

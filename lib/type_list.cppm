@@ -8,7 +8,6 @@ export module loki23:type_list;
 export template <typename... Ts>
 struct type_list {};
 
-// ── length<TL>────────────
 export template <typename TL>
 struct length;
 
@@ -19,7 +18,6 @@ struct length<type_list<Ts...>>
 export template <typename TL>
 inline constexpr std::size_t length_v = length<TL>::value;
 
-// ── type_at<I, TL>────────
 export template <std::size_t I, typename TL>
 struct type_at;
 
@@ -33,8 +31,6 @@ struct type_at<0, type_list<T, Ts...>> {
 
 export template <std::size_t I, typename TL>
 using type_at_t = typename type_at<I, TL>::type;
-
-// ── type_at_non_strict<I, TL, Default> ───────────────────────────────────────
 
 export template <std::size_t I, typename TL, typename Default = void>
 struct type_at_non_strict {
@@ -52,8 +48,6 @@ struct type_at_non_strict<0, type_list<T, Ts...>, Default> {
 
 export template <std::size_t I, typename TL, typename Default = void>
 using type_at_non_strict_t = typename type_at_non_strict<I, TL, Default>::type;
-
-// ── index_of<T, TL>───────
 
 export template <typename T, typename TL>
 struct index_of;
@@ -77,15 +71,11 @@ public:
 export template <typename T, typename TL>
 inline constexpr int index_of_v = index_of<T, TL>::value;
 
-// ── contains<T, TL>───────
-
 export template <typename T, typename TL>
 struct contains : std::bool_constant<index_of_v<T, TL> != -1> {};
 
 export template <typename T, typename TL>
 inline constexpr bool contains_v = contains<T, TL>::value;
-
-// ── push_front<T, TL>─────
 
 export template <typename T, typename TL>
 struct push_front;
@@ -98,8 +88,6 @@ struct push_front<T, type_list<Ts...>> {
 export template <typename T, typename TL>
 using push_front_t = typename push_front<T, TL>::type;
 
-// ── push_back<T, TL>──────
-
 export template <typename T, typename TL>
 struct push_back;
 
@@ -111,8 +99,6 @@ struct push_back<T, type_list<Ts...>> {
 export template <typename T, typename TL>
 using push_back_t = typename push_back<T, TL>::type;
 
-// ── append<TL1, TL2>──────
-
 export template <typename TL1, typename TL2>
 struct append;
 
@@ -123,8 +109,6 @@ struct append<type_list<Ts...>, type_list<Us...>> {
 
 export template <typename TL1, typename TL2>
 using append_t = typename append<TL1, TL2>::type;
-
-// ── erase<T, TL>──────────
 
 export template <typename T, typename TL>
 struct erase;
@@ -147,8 +131,6 @@ struct erase<T, type_list<U, Ts...>> {
 export template <typename T, typename TL>
 using erase_t = typename erase<T, TL>::type;
 
-// ── erase_all<T, TL>──────
-
 export template <typename T, typename TL>
 struct erase_all;
 
@@ -170,8 +152,6 @@ struct erase_all<T, type_list<U, Ts...>> {
 export template <typename T, typename TL>
 using erase_all_t = typename erase_all<T, TL>::type;
 
-// ── no_duplicates<TL>─────
-
 export template <typename TL>
 struct no_duplicates;
 
@@ -190,8 +170,6 @@ public:
 
 export template <typename TL>
 using no_duplicates_t = typename no_duplicates<TL>::type;
-
-// ── replace<T, U, TL>─────
 
 export template <typename T, typename U, typename TL>
 struct replace;
@@ -214,8 +192,6 @@ struct replace<T, U, type_list<V, Ts...>> {
 export template <typename T, typename U, typename TL>
 using replace_t = typename replace<T, U, TL>::type;
 
-// ── replace_all<T, U, TL>─
-
 export template <typename T, typename U, typename TL>
 struct replace_all;
 
@@ -237,8 +213,6 @@ struct replace_all<T, U, type_list<V, Ts...>> {
 export template <typename T, typename U, typename TL>
 using replace_all_t = typename replace_all<T, U, TL>::type;
 
-// ── reverse<TL>───────────
-
 export template <typename TL>
 struct reverse;
 
@@ -254,8 +228,6 @@ struct reverse<type_list<T, Ts...>> {
 
 export template <typename TL>
 using reverse_t = typename reverse<TL>::type;
-
-// ── most_derived<TL, Base>
 
 export template <typename TL, typename Base>
 struct most_derived;
@@ -275,8 +247,6 @@ public:
 
 export template <typename TL, typename Base>
 using most_derived_t = typename most_derived<TL, Base>::type;
-
-// ── derived_to_front<TL>──
 
 export template <typename TL>
 struct derived_to_front;
@@ -299,8 +269,6 @@ public:
 export template <typename TL>
 using derived_to_front_t = typename derived_to_front<TL>::type;
 
-// ── apply<F, TL>──────────
-
 export template <template <typename> typename F, typename TL>
 struct apply;
 
@@ -311,8 +279,6 @@ struct apply<F, type_list<Ts...>> {
 
 export template <template <typename> typename F, typename TL>
 using apply_t = typename apply<F, TL>::type;
-
-// ── filter<Pred, TL>──────
 
 export template <template <typename> typename Pred, typename TL>
 struct filter;
@@ -332,8 +298,6 @@ public:
 
 export template <template <typename> typename Pred, typename TL>
 using filter_t = typename filter<Pred, TL>::type;
-
-// ── for_each<TL>(f)───────
 
 export template <typename... Ts, typename F>
 constexpr void for_each(type_list<Ts...>, F &&f) {

@@ -3,7 +3,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 
-import loki23.smart_ptr.resource;
+import loki23.smart_ptr;
 
 struct IntrusiveBase {
     void add_ref()  noexcept { ++m_refs; }
@@ -19,28 +19,15 @@ struct SensorData : IntrusiveBase {
     SensorData(double t, double p) : temperature(t), pressure(p) {}
 };
 
-// Fast path: unique ownership, no runtime checks, heap pointer
 using FastResource    = SmartPtr<int,        UniqueOwnership,   NoCheck,        DefaultStorage>;
-
-// Safe path: shared ownership, exception on invalid access, heap pointer
 using SafeResource    = SmartPtr<int,        SharedOwnership,   ExceptionCheck, DefaultStorage>;
-
-// POSIX file: unique ownership, assert on bad fd, OS file descriptor
 using FileResource    = SmartPtr<int,        UniqueOwnership,   AssertCheck,    FileDescriptorStorage>;
-
-// Network socket: shared handle, exception on bad socket
 using SocketResource  = SmartPtr<int,        SharedOwnership,   ExceptionCheck, SocketStorage>;
-
-// Intrusive: the managed object itself tracks reference count
 using IntrusiveResource = SmartPtr<SensorData, IntrusiveOwnership, AssertCheck, DefaultStorage>;
 
-// ============================================================
 int main() {
     std::cout << "=== Policy-based Resource Manager ===\n\n";
 
-    // ---------------------------------------------------------
-    // [1] UniqueOwnership + DefaultStorage + NoCheck
-    // ---------------------------------------------------------
     std::cout << "[1] FastResource (Unique | NoCheck | Pointer)\n";
     {
         FastResource r{new int{42}};
@@ -51,9 +38,6 @@ int main() {
                   <<          "  r2.valid()=" << r2.valid() << "\n";
     }
 
-    // ---------------------------------------------------------
-    // [2] SharedOwnership + DefaultStorage + ExceptionCheck
-    // ---------------------------------------------------------
     std::cout << "\n[2] SafeResource (Shared | ExceptionCheck | Pointer)\n";
     {
         SafeResource r1{new int{100}};
@@ -74,9 +58,6 @@ int main() {
         }
     }
 
-    // ---------------------------------------------------------
-    // [3] UniqueOwnership + FileDescriptorStorage + AssertCheck
-    // ---------------------------------------------------------
     std::cout << "\n[3] FileResource (Unique | AssertCheck | FileDescriptor)\n";
     {
         int fd = ::open("/tmp/loki23_demo.txt",
@@ -86,9 +67,6 @@ int main() {
     }
     std::cout << "    fd closed on scope exit\n";
 
-    // ---------------------------------------------------------
-    // [4] SharedOwnership + SocketStorage + ExceptionCheck
-    // ---------------------------------------------------------
     std::cout << "\n[4] SocketResource (Shared | ExceptionCheck | Socket)\n";
     {
         int sock = ::socket(AF_INET, SOCK_STREAM, 0);
@@ -99,9 +77,6 @@ int main() {
     }
     std::cout << "    socket closed by last owner\n";
 
-    // ---------------------------------------------------------
-    // [5] IntrusiveOwnership + DefaultStorage + AssertCheck
-    // ---------------------------------------------------------
     std::cout << "\n[5] IntrusiveResource (Intrusive | AssertCheck | Pointer)\n";
     {
         IntrusiveResource ir1{new SensorData{36.6, 101.3}};

@@ -4,15 +4,56 @@ module;
 #include <cassert>
 #include <cstddef>
 #include <list>
+#include <new>
 #include <utility>
 
 export module loki23.smart_ptr.ownership;
 
-export {
+namespace detail {
+  struct CountBlock {
+    std::size_t value;
+    CountBlock *next;
+  };
 
-  // ============================================================
-  // Base class for ref-counted ownership
-  // ============================================================
+  class CountBlockPool {
+    CountBlock *free_{nullptr};
+
+  public:
+    CountBlockPool() = default;
+    CountBlockPool(const CountBlockPool &) = delete;
+    CountBlockPool &operator=(const CountBlockPool &) = delete;
+
+    ~CountBlockPool() {
+      while (free_) {
+        CountBlock *block = free_;
+        free_ = free_->next;
+        ::operator delete(block);
+      }
+    }
+
+    std::size_t *allocate() {
+      CountBlock *block = free_;
+      if (block) {
+        free_ = block->next;
+      } else {
+        block = static_cast<CountBlock *>(::operator new(sizeof(CountBlock)));
+      }
+      block->value = 1;
+      block->next = nullptr;
+      return &block->value;
+    }
+
+    void deallocate(std::size_t *count) noexcept {
+      CountBlock *block = reinterpret_cast<CountBlock *>(count);
+      block->next = free_;
+      free_ = block;
+    }
+  };
+
+  inline CountBlockPool count_block_pool;
+}
+
+export {
 
   class RefCountBase {
   protected:
@@ -28,21 +69,17 @@ export {
       count_ = rhs.count_; rhs.count_ = nullptr; return *this;
     }
 
-    void alloc_count() { count_ = new std::size_t{1}; assert(count_); }
+    void alloc_count() { count_ = detail::count_block_pool.allocate(); assert(count_); }
     void inc_count()   noexcept { if (count_) ++(*count_); }
     bool dec_count()   noexcept {
       if (!count_) return false;
-      if (!--*count_) { delete count_; count_ = nullptr; return true; }
+      if (!--*count_) { detail::count_block_pool.deallocate(count_); count_ = nullptr; return true; }
       return false;
     }
 
   public:
     std::size_t use_count() const noexcept { return count_ ? *count_ : 0; }
   };
-
-  // ============================================================
-  // Concepts
-  // ============================================================
 
   template <typename Policy, typename Thandle>
   concept Clonable = requires(Policy policy, Thandle h) {
@@ -55,19 +92,13 @@ export {
     { policy.release(h) } -> std::same_as<bool>;
   };
 
-  // Misc concept
   template <typename Tval>
   concept DeepCopyable = requires(const Tval &v) {
     { v.deep_copy() } -> std::same_as<void>;
   };
 
-  // ============================================================
-  // SmartPtr ownership policies (non-template, template methods)
-  // ============================================================
-
-  // Ref-counted — shared ownership via heap-allocated counter
   struct RefCounted : RefCountBase {
-    RefCounted() : RefCountBase(nullptr) {}  // no alloc: acquire() does it
+    RefCounted() : RefCountBase(nullptr) {}
     RefCounted(const RefCounted &rhs) : RefCountBase(rhs) {}
     RefCounted &operator=(const RefCounted &) = default;
 
@@ -86,7 +117,6 @@ export {
     }
   };
 
-  // Thread-safe ref-counted base — atomic heap-allocated counter
   class AtomicRefCountBase {
   protected:
     std::atomic<std::size_t> *count_;
@@ -121,7 +151,6 @@ export {
     }
   };
 
-  // Thread-safe ref-counted — shared ownership via atomic heap-allocated counter
   struct RefCountedMT : AtomicRefCountBase {
     RefCountedMT() : AtomicRefCountBase(nullptr) {}
     RefCountedMT(const RefCountedMT &rhs) : AtomicRefCountBase(rhs) {}
@@ -142,7 +171,6 @@ export {
     }
   };
 
-  // Linked-list ref counting — membership tracked per-instance
   struct RefLinked {
     std::list<RefLinked *> list_;
 
@@ -150,7 +178,7 @@ export {
     RefLinked(const RefLinked &rhs) : list_(rhs.list_) {}
 
     template <typename Tptr>
-    void acquire(const Tptr &) noexcept {}  // list seeded in constructor
+    void acquire(const Tptr &) noexcept {}
 
     template <typename Tptr>
     Tptr clone(const Tptr &v) { list_.push_back(this); return v; }
@@ -167,7 +195,6 @@ export {
     }
   };
 
-  // Shallow copy — pointer is shared, each owner destroys independently
   struct Copy {
     template <typename Tptr>
     void acquire(const Tptr &) noexcept {}
@@ -182,7 +209,6 @@ export {
     int use_count(const Tptr &) const noexcept { return 1; }
   };
 
-  // Deep copy — each owner gets its own independent copy
   struct DeepCopy {
     template <typename Tptr>
     void acquire(const Tptr &) noexcept {}
@@ -205,7 +231,6 @@ export {
     int use_count(const Tptr &) const noexcept { return 1; }
   };
 
-  // No copy — move-only ownership
   struct NoCopy {
     template <typename Tptr>
     void acquire(const Tptr &) noexcept {}
@@ -220,11 +245,6 @@ export {
     int use_count(const Tptr &) const noexcept { return 1; }
   };
 
-  // ============================================================
-  // Resource ownership policies
-  // ============================================================
-
-  // Single owner — move-only, always destroys on release
   struct UniqueOwnership {
     UniqueOwnership() = default;
     UniqueOwnership(const UniqueOwnership &) = delete;
@@ -242,7 +262,6 @@ export {
     int use_count(const Tptr &) const noexcept { return 1; }
   };
 
-  // Shared owner — ref-counted via RefCountBase
   struct SharedOwnership : RefCountBase {
     SharedOwnership() : RefCountBase(nullptr) {}
 
@@ -270,7 +289,6 @@ export {
     }
   };
 
-  // Concept for objects that carry their own ref count
   template <typename T>
   concept IntrusiveCounted = requires(T &t) {
     t.add_ref();
@@ -278,7 +296,6 @@ export {
     { t.ref_count() } -> std::convertible_to<int>;
   };
 
-  // Intrusive owner — delegates ref counting to the object itself
   struct IntrusiveOwnership {
     IntrusiveOwnership() = default;
 

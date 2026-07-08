@@ -28,8 +28,9 @@ export {
     OwnPolicy ownership_{};
 
     void clean() {
-      if (Store::is_valid(storage_.get()) && ownership_.release(storage_.get()))
-        Store::destroy(storage_.get());
+      handle_type h = storage_.get();
+      if (Store::is_valid(h) && ownership_.release(h))
+        Store::destroy(h);
     }
 
   public:
@@ -44,13 +45,10 @@ export {
 
     ~SmartPtr() { clean(); }
 
-    // Copy — only when OwnPolicy provides clone()
     SmartPtr(const SmartPtr &rhs)
         requires Clonable<OwnPolicy, handle_type>
         : ownership_(rhs.ownership_) {
       handle_type h = rhs.storage_.get();
-      // clone() may return the same handle (RefCounted) or a new one (DeepCopy);
-      // always use the returned handle, never the raw rhs handle.
       storage_.set(Store::is_valid(h) ? ownership_.clone(h) : Store::null_handle());
     }
 
@@ -82,13 +80,15 @@ export {
     }
 
     handle_type get() const {
-      CheckPolicy::check(valid());
-      return storage_.get();
+      handle_type h = storage_.get();
+      CheckPolicy::check(Store::is_valid(h));
+      return h;
     }
 
     operator handle_type() const requires (ConvPolicy::implicit_convert()) {
-      CheckPolicy::check(valid());
-      return storage_.get();
+      handle_type h = storage_.get();
+      CheckPolicy::check(Store::is_valid(h));
+      return h;
     }
     bool        valid()     const noexcept { return Store::is_valid(storage_.get()); }
     int         use_count() const noexcept { return ownership_.use_count(storage_.get()); }
@@ -96,14 +96,16 @@ export {
     Tval &operator*()
         requires std::same_as<handle_type, Tval *>
     {
-      CheckPolicy::check(valid());
-      return *storage_.get();
+      handle_type h = storage_.get();
+      CheckPolicy::check(Store::is_valid(h));
+      return *h;
     }
     Tval *operator->()
         requires std::same_as<handle_type, Tval *>
     {
-      CheckPolicy::check(valid());
-      return storage_.get();
+      handle_type h = storage_.get();
+      CheckPolicy::check(Store::is_valid(h));
+      return h;
     }
   };
 }

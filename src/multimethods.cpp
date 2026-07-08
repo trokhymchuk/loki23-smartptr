@@ -115,9 +115,6 @@ ComplexNumber operator+(const ComplexNumber &lhs, const ComplexNumber &rhs) {
 }
 ComplexNumber operator+(const ComplexNumber &lhs, const Number &rhs) { return lhs + ComplexNumber{rhs.representation}; }
 
-// void f(IntNumber *iNumber, DoubleNumber *dNumb) {}
-// void f(DoubleNumber *dNumber, IntNumber *iNumber) {}
-
 #if 1
 int main() {
   Number *pInt = new IntNumber{"1"};
@@ -142,8 +139,6 @@ int main() {
                                       IntNumber, DoubleNumber, ComplexNumber>;
 
   dispatcher::dispatch(pInt, pDouble, execs);
-
-  // f(pInt, pDouble);
 
   dispatcher::dispatch(pDouble, pInt, execs);
   dispatcher::dispatch(pDouble, pComplex, execs);

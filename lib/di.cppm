@@ -8,7 +8,6 @@ import :hierarchy;
 
 export {
 
-  // Container inherits the linear hierarchy and adds bind/get/resolve.
   template <typename... Ts>
   struct Container : GenLinearHierarchy<LazyHolder, type_list<Ts...>> {
     using Base = GenLinearHierarchy<LazyHolder, type_list<Ts...>>;

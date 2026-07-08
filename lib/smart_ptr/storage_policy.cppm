@@ -1,7 +1,9 @@
 module;
 
 #include <mutex>
+#ifndef _WIN32
 #include <unistd.h>
+#endif
 
 export module loki23.smart_ptr.storage;
 
@@ -17,7 +19,6 @@ export {
     { Policy::destroy(h) } -> std::same_as<void>;
   };
 
-  // Default heap-pointer storage: holds T*, owns with delete
   template <typename T> struct DefaultStorage {
     using handle_type = T *;
 
@@ -31,10 +32,8 @@ export {
     static void destroy(handle_type h) noexcept { delete h; }
   };
 
-  // Semantic alias — PointerStorage and DefaultStorage are identical
   template <typename T> using PointerStorage = DefaultStorage<T>;
 
-  // Thread-safe pointer storage (get/set protected by mutex)
   template <typename T> struct LockedStorage {
     using handle_type = T *;
 
@@ -55,6 +54,7 @@ export {
     static void destroy(handle_type h) noexcept { delete h; }
   };
 
+#ifndef _WIN32
   template <typename T> struct FileDescriptorStorage {
     using handle_type = int;
     handle_type handle_{-1};
@@ -84,4 +84,5 @@ export {
         ::close(h);
     }
   };
+#endif
 }

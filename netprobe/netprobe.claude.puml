@@ -1,0 +1,199 @@
+@startuml netprobe
+
+skinparam classAttributeIconSize 0
+skinparam classFontSize 13
+skinparam linetype ortho
+
+' ─── Packets ────────────────────────────────────────────────────────────────
+
+abstract class NetPacket {
+  + src_ip   : string
+  + dst_ip   : string
+  + size     : uint32_t
+  + timestamp: time_point
+  --
+  + {abstract} type_name() : string
+  + {abstract} deep_copy() : NetPacket*
+  + to_string() : string
+  # fill_base(IPv4Layer*, RawPacket*)
+}
+
+class TcpPacket {
+  + src_port   : uint16_t
+  + dst_port   : uint16_t
+  + seq_num    : uint32_t
+  + ack_num    : uint32_t
+  + window_size: uint16_t
+  + syn, ack, fin, rst, psh : bool
+  --
+  + type_name() : string
+  + deep_copy()  : NetPacket*
+  + to_string()  : string
+  + flags_str()  : string
+}
+
+class HttpPacket {
+  + method      : string
+  + url         : string
+  + http_version: string
+  + host        : string
+  + status_code : int
+  + is_response : bool
+  + headers     : map<string,string>
+  --
+  + type_name() : string
+  + deep_copy()  : NetPacket*
+  + to_string()  : string
+  - http_method_str(HttpMethod) : string
+  - http_version_str(HttpVersion) : string
+}
+
+class DnsPacket {
+  + query_id   : uint16_t
+  + domain     : string
+  + record_type: string
+  + is_response: bool
+  + answers    : vector<string>
+  --
+  + type_name() : string
+  + deep_copy()  : NetPacket*
+  + to_string()  : string
+  - dns_type_str(DnsType) : string
+}
+
+class UdpPacket {
+  + src_port: uint16_t
+  + dst_port: uint16_t
+  --
+  + type_name() : string
+  + deep_copy()  : NetPacket*
+  + to_string()  : string
+}
+
+NetPacket  <|-- TcpPacket
+TcpPacket  <|-- HttpPacket
+NetPacket  <|-- DnsPacket
+NetPacket  <|-- UdpPacket
+
+' ─── Listeners ───────────────────────────────────────────────────────────────
+
+class PacketListener {
+  # last_packet_ : SmartPtr<NetPacket>
+  - stop_   : bool
+  - mutex_  : mutex
+  - cv_     : condition_variable
+  - queue_  : queue<SmartPtr<NetPacket>>
+  - thread_ : thread
+  --
+  + push(SmartPtr<NetPacket>)
+  + on_packet(const NetPacket&) <<virtual>>
+  # stop()
+  - run()
+}
+
+class PacketLogger {
+  + on_packet(const NetPacket&)
+}
+
+class StatisticsListener {
+  + tcp  : TcpStats
+  + http : HttpStats
+  + dns  : DnsStats
+  + udp  : UdpStats
+  --
+  + on_packet(const NetPacket&)
+  + print_report(ostream&)
+}
+
+class SmartListener {
+  - dispatcher_  : DynamicDispatcher<...>
+  - ip_to_domain_: map<string,string>
+  - reported_    : set<string>
+  --
+  + on_packet(const NetPacket&)
+  - check_dns_connection(DnsPacket*, dst_ip, dst_port)
+  - note_connection(proto, dst_ip, dst_port, host)
+}
+
+PacketListener <|-- PacketLogger
+PacketListener <|-- StatisticsListener
+PacketListener <|-- SmartListener
+
+' ─── Stats nested structs ────────────────────────────────────────────────────
+
+class "StatisticsListener::TcpStats" as TcpStats {
+  packets : uint64_t
+  bytes   : uint64_t
+  syn     : uint64_t
+  fin     : uint64_t
+  rst     : uint64_t
+}
+
+class "StatisticsListener::HttpStats" as HttpStats {
+  requests    : uint64_t
+  responses   : uint64_t
+  bytes       : uint64_t
+  methods     : map<string,uint64_t>
+  status_codes: map<int,uint64_t>
+}
+
+class "StatisticsListener::DnsStats" as DnsStats {
+  queries     : uint64_t
+  responses   : uint64_t
+  bytes       : uint64_t
+  record_types: map<string,uint64_t>
+  domains     : map<string,uint64_t>
+}
+
+class "StatisticsListener::UdpStats" as UdpStats {
+  packets: uint64_t
+  bytes  : uint64_t
+}
+
+StatisticsListener +-- TcpStats
+StatisticsListener +-- HttpStats
+StatisticsListener +-- DnsStats
+StatisticsListener +-- UdpStats
+
+' ─── Capturers ───────────────────────────────────────────────────────────────
+
+abstract class PacketCapturer {
+  # listeners_ : vector<PacketListener*>
+  --
+  + {abstract} open(string)
+  + {abstract} close()
+  + add_listener(PacketListener*)
+  + remove_listener(PacketListener*)
+  + dispatch(const NetPacket&)
+  # parse(RawPacket*) : NetPacket*
+}
+
+class LiveCapturer {
+  - interface_name_: string
+  - device_        : PcapLiveDevice*
+  --
+  + open(string)
+  + close()
+  + interface_name() : string
+  - on_packet_arrives(RawPacket*, PcapLiveDevice*, void*)
+}
+
+class PcapFileCapturer {
+  - reader_: SmartPtr<PcapFileReaderDevice>
+  --
+  + open(string)
+  + close()
+}
+
+PacketCapturer <|-- LiveCapturer
+PacketCapturer <|-- PcapFileCapturer
+
+' ─── Relationships ───────────────────────────────────────────────────────────
+
+PacketCapturer "1" o-- "0..*" PacketListener : listeners_
+PacketCapturer ..> NetPacket : <<creates via parse()>>
+SmartListener  ..> DnsPacket : reads
+SmartListener  ..> TcpPacket : reads
+SmartListener  ..> HttpPacket: reads
+
+@enduml

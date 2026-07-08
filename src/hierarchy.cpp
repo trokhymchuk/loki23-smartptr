@@ -185,14 +185,12 @@ struct UserService {
 };
 
 int main() {
-  // Types listed in dependency order: deps before dependents
   Container<Logger, DB, UserService> hierarchy;
 
   hierarchy.bind<Logger>();
   hierarchy.bind<DB>(From<Logger>{}, 5432);
   hierarchy.bind<UserService>(From<DB>{}, From<Logger>{});
 
-  // Nothing constructed yet — resolves the full graph here:
   UserService &svc = hierarchy.get<UserService>();
   svc.logger.log("done");
 }

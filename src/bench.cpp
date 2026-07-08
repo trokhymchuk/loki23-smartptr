@@ -1,13 +1,13 @@
-// Benchmark: loki23 (modern C++23 rewrite)
-
 #include <chrono>
+#include <cstdlib>
 #include <cstdio>
 #include <string_view>
+#include <functional>
+#include <tuple>
+#include <utility>
 
 import loki23;
 import loki23.factory;
-
-// ── helpers ──────────────────────────────────────────────────────────────────
 
 using Clock = std::chrono::high_resolution_clock;
 
@@ -15,35 +15,73 @@ static volatile long long g_sink = 0;
 
 struct Result {
     const char* name;
-    double      ns_per_op;
+    double      total_ns;
+    long long   total_ops;
     long long   ops_per_sec;
 };
 
+constexpr int BENCH_RUNS = 1000;
+
+static bool csv_enabled() {
+    return std::getenv("BENCH_CSV") != nullptr;
+}
+
+static const char* suite_name() {
+    const char* suite = std::getenv("BENCH_SUITE");
+    return suite ? suite : "loki23";
+}
+
+static const char* csv_path() {
+    return std::getenv("BENCH_CSV_OUT");
+}
+
+static void append_csv_result(const Result& r) {
+    const char* path = csv_path();
+    if (!path)
+        return;
+
+    if (FILE* file = std::fopen(path, "a")) {
+        std::fprintf(file, "\"%s\",\"%s\",%d,%lld,%.0f,%.6f,%lld,\"\"\n",
+                     suite_name(), r.name, BENCH_RUNS, r.total_ops, r.total_ns,
+                     r.total_ns / 1e6, r.ops_per_sec);
+        std::fclose(file);
+    }
+}
+
 template <typename F>
 static Result run(const char* name, long long N, F body) {
-    body(); // warmup
+    body();
 
-    auto t0 = Clock::now();
-    for (long long i = 0; i < N; ++i)
-        body();
-    auto t1 = Clock::now();
+    double total_ns = 0.0;
+    for (int run = 0; run < BENCH_RUNS; ++run) {
+        auto t0 = Clock::now();
+        for (long long i = 0; i < N; ++i)
+            body();
+        auto t1 = Clock::now();
 
-    double total_ns = static_cast<double>(
-        std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count());
-    double ns_per_op  = total_ns / static_cast<double>(N);
-    long long ops_sec = static_cast<long long>(1e9 / ns_per_op);
-    return {name, ns_per_op, ops_sec};
+        total_ns += static_cast<double>(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count());
+    }
+
+    long long total_ops = N * static_cast<long long>(BENCH_RUNS);
+    long long ops_sec = static_cast<long long>(
+        static_cast<double>(total_ops) * 1e9 / total_ns);
+    return {name, total_ns, total_ops, ops_sec};
 }
 
 static void print(const Result& r) {
-    std::printf("  %-42s  %8.2f ns/op   %12lld ops/s\n",
-                r.name, r.ns_per_op, r.ops_per_sec);
+    if (csv_enabled()) {
+        std::printf("\"%s\",\"%s\",%d,%lld,%.0f,%.6f,%lld,\"\"\n",
+                    suite_name(), r.name, BENCH_RUNS, r.total_ops, r.total_ns,
+                    r.total_ns / 1e6, r.ops_per_sec);
+        return;
+    }
+
+    append_csv_result(r);
+    std::printf("  %-42s  %10.3f ms total   %12lld ops/s\n",
+                r.name, r.total_ns / 1e6, r.ops_per_sec);
 }
 
-// ── SmartPtr fixtures ─────────────────────────────────────────────────────────
-
-// loki23 DeepCopy uses the copy constructor — no Clone() method required.
-// virtual dtor forces the compiler to actually heap-allocate (prevents elision).
 struct Widget {
     int value;
     explicit Widget(int v = 0) : value(v) {}
@@ -52,12 +90,12 @@ struct Widget {
 
 using PtrRC = SmartPtr<int,    RefCounted, NoCheck>;
 using PtrDC = SmartPtr<Widget, DeepCopy,   NoCheck>;
-
-// ── Singleton fixture ─────────────────────────────────────────────────────────
+using PtrNC = SmartPtr<int,    NoCopy,     NoCheck>;
+#ifndef _WIN32
+using InvalidFdResource = SmartPtr<int, UniqueOwnership, NoCheck, FileDescriptorStorage>;
+#endif
 
 struct Config { int x = 7; };
-
-// ── Factory fixture ───────────────────────────────────────────────────────────
 
 struct Shape { virtual int area() const = 0; virtual ~Shape() = default; };
 
@@ -80,63 +118,140 @@ struct Pentagon : Shape {
 
 using Shapes = type_list<Circle, Square, Triangle, Pentagon>;
 
-// ── main ──────────────────────────────────────────────────────────────────────
+struct MMBase { virtual ~MMBase() = default; };
+struct MMA : MMBase { int value = 1; };
+struct MMB : MMBase { int value = 2; };
+struct MMC : MMBase { int value = 3; };
 
 int main() {
-    std::printf("=== loki23 (C++23 modules rewrite) ===\n\n");
+    if (!csv_enabled())
+        std::printf("=== loki23 (C++23 modules rewrite) ===\n\n");
 
     constexpr long long N_PTR  = 1'000'000;
     constexpr long long N_SING = 10'000'000;
     constexpr long long N_FACT = 1'000'000;
+    constexpr long long N_SETUP = 1'000;
 
-    // --- SmartPtr RefCounted: construct + copy + dereference ---
     print(run("SmartPtr<RefCounted> ctor+copy+deref+dtor", N_PTR, [&] {
         PtrRC p{new int{42}};
         PtrRC q{p};
         g_sink += *p + *q;
     }));
 
-    // --- SmartPtr DeepCopy: construct + copy-construct + dereference ---
     // Use (int)g_sink as the initial value so the compiler cannot constant-fold.
     print(run("SmartPtr<DeepCopy> ctor+clone+deref+dtor", N_PTR, [&] {
         PtrDC p{new Widget{(int)g_sink}};
-        PtrDC q{p};               // heap-allocates a new Widget via copy ctor
+        PtrDC q{p};
         g_sink += (*p).value + (*q).value;
     }));
 
-    // --- SmartPtr RefCounted: move (loki23 advantage) ---
-    print(run("SmartPtr<RefCounted> ctor+move+dtor", N_PTR, [&] {
-        PtrRC p{new int{42}};
-        PtrRC q{std::move(p)};    // zero-cost: just pointer swap, no heap op
+    print(run("SmartPtr<NoCopy> unique ctor+deref+dtor", N_PTR, [&] {
+        PtrNC p{new int{42}};
+        g_sink += *p;
+    }));
+
+    print(run("SmartPtr<NoCopy> unique ctor+move+dtor", N_PTR, [&] {
+        PtrNC p{new int{42}};
+        PtrNC q{std::move(p)};
         g_sink += *q;
     }));
 
-    // --- SmartPtr RefCounted: 10-deep copy chain ---
-    print(run("SmartPtr<RefCounted> 10x copy chain", N_PTR / 10, [&] {
+    print(run("SmartPtr<RefCounted> ctor+move+dtor", N_PTR, [&] {
+        PtrRC p{new int{42}};
+        PtrRC q{std::move(p)};
+        g_sink += *q;
+    }));
+
+    print(run("SmartPtr<RefCounted> 10x move chain", N_PTR / 10, [&] {
         PtrRC p0{new int{0}};
-        PtrRC p1{p0}, p2{p1}, p3{p2}, p4{p3}, p5{p4},
-              p6{p5}, p7{p6}, p8{p7}, p9{p8};
+        PtrRC p1{std::move(p0)}, p2{std::move(p1)}, p3{std::move(p2)},
+              p4{std::move(p3)}, p5{std::move(p4)}, p6{std::move(p5)},
+              p7{std::move(p6)}, p8{std::move(p7)}, p9{std::move(p8)};
         g_sink += *p9;
     }));
 
-    // --- Singleton hot access ---
-    // Use NoDestroy to skip the atexit cleanup that can race with module teardown.
-    print(run("Singleton::instance() hot loop", N_SING, [&] {
+#ifndef _WIN32
+    print(run("Resource<FileDescriptorStorage> invalid handle", N_PTR, [&] {
+        InvalidFdResource fd{-1};
+        g_sink += fd.valid() ? 1 : 0;
+    }));
+#endif
+
+    // NoDestroy avoids atexit cleanup racing with module teardown.
+    print(run("Singleton hot loop", N_SING, [&] {
         g_sink += SingletonHolder<Config, CreateUsingNew<Config>, NoDestroy<Config>>::instance().x;
     }));
 
-    // --- Factory: create by string_view key, use result ---
     {
         Factory<Shape, Shapes> factory;
         const char* names[] = {"Circle", "Square", "Triangle", "Pentagon"};
         int idx = 0;
 
-        print(run("Factory::create(string_view)", N_FACT, [&] {
+        print(run("Factory create by name", N_FACT, [&] {
             auto s = factory.create(names[idx & 3]);
             g_sink += s->area();
             ++idx;
         }));
+
+        print(run("Factory create by hot name", N_FACT, [&] {
+            auto s = factory.create("Circle");
+            g_sink += s->area();
+        }));
+
+        idx = 0;
+        print(run("Factory contains", N_FACT, [&] {
+            g_sink += factory.contains(names[idx & 3]) ? 1 : 0;
+            ++idx;
+        }));
     }
 
-    std::printf("\n(g_sink=%lld)\n", g_sink);
+    print(run("Factory setup+create by name", N_SETUP, [&] {
+        Factory<Shape, Shapes> factory;
+        auto s = factory.create("Circle");
+        g_sink += s->area();
+    }));
+
+    {
+        MMA a;
+        MMB b;
+        MMC c;
+        MMBase* pairs[][2] = {{&a, &b}, {&b, &a}, {&c, &c}, {&a, &b}};
+        int idx = 0;
+
+        using StaticMM = StaticDispatcher<DispatchPolicy::FIRST_MATCH, NoOpNoMatchPolicy,
+                                          MMBase, MMBase, std::tuple<void>, MMA, MMB, MMC>;
+        auto execs = std::make_tuple(
+            [](MMA* lhs, MMB* rhs) { g_sink += lhs->value + rhs->value; },
+            [](MMB* lhs, MMA* rhs) { g_sink += lhs->value - rhs->value; },
+            [](MMC* lhs, MMC* rhs) { g_sink += lhs->value * rhs->value; });
+
+        print(run("Multimethod StaticDispatcher", N_FACT, [&] {
+            StaticMM::dispatch(pairs[idx & 3][0], pairs[idx & 3][1], execs);
+            ++idx;
+        }));
+
+        DynamicDispatcher<DispatchPolicy::FIRST_MATCH, NoOpNoMatchPolicy, MMBase&, MMBase&> dispatcher;
+        dispatcher.add(std::function<void(MMA&, MMB&)>{[](MMA& lhs, MMB& rhs) {
+            g_sink += lhs.value + rhs.value;
+        }});
+        dispatcher.add(std::function<void(MMB&, MMA&)>{[](MMB& lhs, MMA& rhs) {
+            g_sink += lhs.value - rhs.value;
+        }});
+        dispatcher.add(std::function<void(MMC&, MMC&)>{[](MMC& lhs, MMC& rhs) {
+            g_sink += lhs.value * rhs.value;
+        }});
+        idx = 0;
+
+        print(run("Multimethod DynamicDispatcher", N_FACT, [&] {
+            dispatcher.dispatch(*pairs[idx & 3][0], *pairs[idx & 3][1]);
+            ++idx;
+        }));
+
+        print(run("Multimethod dynamic same pair", N_FACT, [&] {
+            dispatcher.dispatch(a, b);
+        }));
+    }
+
+    if (!csv_enabled())
+        std::printf("\n(g_sink=%lld)\n", g_sink);
 }

@@ -1,0 +1,79 @@
+@startuml netprobe_packets
+
+skinparam classAttributeIconSize 0
+skinparam classFontSize 13
+
+abstract class NetPacket {
+  + src_ip   : string
+  + dst_ip   : string
+  + size     : uint32_t
+  + timestamp: time_point
+  --
+  + {abstract} type_name() : string
+  + {abstract} deep_copy() : NetPacket*
+  + to_string() : string
+  # fill_base(IPv4Layer*, RawPacket*)
+}
+
+class TcpPacket {
+  + src_port   : uint16_t
+  + dst_port   : uint16_t
+  + seq_num    : uint32_t
+  + ack_num    : uint32_t
+  + window_size: uint16_t
+  + syn : bool
+  + ack : bool
+  + fin : bool
+  + rst : bool
+  + psh : bool
+  --
+  + type_name() : string
+  + deep_copy()  : NetPacket*
+  + to_string()  : string
+  + flags_str()  : string
+}
+
+class HttpPacket {
+  + method      : string
+  + url         : string
+  + http_version: string
+  + host        : string
+  + status_code : int
+  + is_response : bool
+  + headers     : map<string, string>
+  --
+  + type_name() : string
+  + deep_copy()  : NetPacket*
+  + to_string()  : string
+  - http_method_str(HttpMethod) : string
+  - http_version_str(HttpVersion) : string
+}
+
+class DnsPacket {
+  + query_id   : uint16_t
+  + domain     : string
+  + record_type: string
+  + is_response: bool
+  + answers    : vector<string>
+  --
+  + type_name() : string
+  + deep_copy()  : NetPacket*
+  + to_string()  : string
+  - dns_type_str(DnsType) : string
+}
+
+class UdpPacket {
+  + src_port: uint16_t
+  + dst_port: uint16_t
+  --
+  + type_name() : string
+  + deep_copy()  : NetPacket*
+  + to_string()  : string
+}
+
+NetPacket <|-- TcpPacket
+NetPacket <|-- DnsPacket
+NetPacket <|-- UdpPacket
+TcpPacket <|-- HttpPacket
+
+@enduml

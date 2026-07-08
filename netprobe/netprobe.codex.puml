@@ -1,0 +1,274 @@
+@startuml netprobe
+
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam defaultFontSize 13
+skinparam linetype ortho
+
+title netprobe class diagram
+
+package "netprobe.packets" {
+  abstract class NetPacket {
+    + src_ip : std::string
+    + dst_ip : std::string
+    + size : uint32_t
+    + timestamp : time_point
+    + {abstract} type_name() : std::string
+    + {abstract} deep_copy() : NetPacket*
+    + to_string() : std::string
+    # fill_base(ipv4 : pcpp::IPv4Layer*, raw : pcpp::RawPacket*)
+  }
+
+  class TcpPacket {
+    + src_port : uint16_t
+    + dst_port : uint16_t
+    + seq_num : uint32_t
+    + ack_num : uint32_t
+    + window_size : uint16_t
+    + syn : bool
+    + ack : bool
+    + fin : bool
+    + rst : bool
+    + psh : bool
+    + TcpPacket(parsed : pcpp::Packet const&, raw : pcpp::RawPacket*)
+    + flags_str() : std::string
+    + type_name() : std::string
+    + deep_copy() : NetPacket*
+    + to_string() : std::string
+  }
+
+  class HttpPacket {
+    + method : std::string
+    + url : std::string
+    + http_version : std::string
+    + host : std::string
+    + status_code : int
+    + is_response : bool
+    + headers : unordered_map<string, string>
+    + HttpPacket(parsed : pcpp::Packet const&, raw : pcpp::RawPacket*)
+    + type_name() : std::string
+    + deep_copy() : NetPacket*
+    + to_string() : std::string
+    - {static} http_method_str(m) : std::string
+    - {static} http_version_str(v) : std::string
+  }
+
+  class DnsPacket {
+    + query_id : uint16_t
+    + domain : std::string
+    + record_type : std::string
+    + is_response : bool
+    + answers : vector<string>
+    + DnsPacket(parsed : pcpp::Packet const&, raw : pcpp::RawPacket*)
+    + type_name() : std::string
+    + deep_copy() : NetPacket*
+    + to_string() : std::string
+    - {static} dns_type_str(t : pcpp::DnsType) : std::string
+  }
+
+  class UdpPacket {
+    + src_port : uint16_t
+    + dst_port : uint16_t
+    + UdpPacket(parsed : pcpp::Packet const&, raw : pcpp::RawPacket*)
+    + type_name() : std::string
+    + deep_copy() : NetPacket*
+    + to_string() : std::string
+  }
+
+  TcpPacket --|> NetPacket
+  HttpPacket --|> TcpPacket
+  DnsPacket --|> NetPacket
+  UdpPacket --|> NetPacket
+}
+
+package "netprobe.listeners" {
+  class PacketListener {
+    # last_packet_ : SmartPtr<NetPacket, RefCountedMT>
+    - stop_ : bool
+    - mutex_ : std::mutex
+    - cv_ : std::condition_variable
+    - queue_ : queue<SmartPtr<NetPacket, RefCountedMT>>
+    - thread_ : std::thread
+    + PacketListener()
+    + ~PacketListener()
+    + push(pkt : SmartPtr<NetPacket, RefCountedMT>)
+    + on_packet(p : NetPacket const&)
+    # stop()
+    - run()
+  }
+
+  class PacketLogger {
+    + {static} type_name : string_view
+    + ~PacketLogger()
+    + on_packet(p : NetPacket const&)
+  }
+
+  class StatisticsListener {
+    + {static} type_name : string_view
+    + tcp : TcpStats
+    + http : HttpStats
+    + dns : DnsStats
+    + udp : UdpStats
+    + ~StatisticsListener()
+    + on_packet(p : NetPacket const&)
+    + print_report(os : std::ostream&) : void
+  }
+
+  class TcpStats {
+    + packets : uint64_t
+    + bytes : uint64_t
+    + syn : uint64_t
+    + fin : uint64_t
+    + rst : uint64_t
+  }
+
+  class HttpStats {
+    + requests : uint64_t
+    + responses : uint64_t
+    + bytes : uint64_t
+    + methods : unordered_map<string, uint64_t>
+    + status_codes : unordered_map<int, uint64_t>
+  }
+
+  class DnsStats {
+    + queries : uint64_t
+    + responses : uint64_t
+    + bytes : uint64_t
+    + record_types : unordered_map<string, uint64_t>
+    + domains : unordered_map<string, uint64_t>
+  }
+
+  class UdpStats {
+    + packets : uint64_t
+    + bytes : uint64_t
+  }
+
+  class SmartListener {
+    + {static} type_name : string_view
+    - dispatcher_ : PacketDispatcher
+    - ip_to_domain_ : unordered_map<string, string>
+    - reported_ : unordered_set<string>
+    + SmartListener()
+    + ~SmartListener()
+    + on_packet(p : NetPacket const&)
+    - check_dns_connection(dns : DnsPacket*, dst_ip : string const&, dst_port : uint16_t)
+    - note_connection(proto : char const*, dst_ip : string const&, dst_port : uint16_t, host : string const&)
+  }
+
+  PacketLogger --|> PacketListener
+  StatisticsListener --|> PacketListener
+  SmartListener --|> PacketListener
+
+  StatisticsListener *-- TcpStats
+  StatisticsListener *-- HttpStats
+  StatisticsListener *-- DnsStats
+  StatisticsListener *-- UdpStats
+}
+
+package "netprobe.capturers" {
+  abstract class PacketCapturer {
+    # listeners_ : vector<PacketListener*>
+    + PacketCapturer()
+    + {abstract} open(arg : std::string)
+    + {abstract} close()
+    + add_listener(listener : PacketListener*)
+    + remove_listener(listener : PacketListener*)
+    + dispatch(pkt : NetPacket const&)
+    # {static} parse(raw : pcpp::RawPacket*) : NetPacket*
+  }
+
+  class LiveCapturer {
+    + {static} type_name : string_view
+    - interface_name_ : std::string
+    - device_ : pcpp::PcapLiveDevice*
+    + LiveCapturer()
+    + ~LiveCapturer()
+    + open(interface_name : std::string)
+    + close()
+    + interface_name() : std::string const&
+    - {static} on_packet_arrives(raw : pcpp::RawPacket*, device : pcpp::PcapLiveDevice*, cookie : void*)
+  }
+
+  class PcapFileCapturer {
+    + {static} type_name : string_view
+    - reader_ : SmartPtr<pcpp::PcapFileReaderDevice, NoCopy>
+    + PcapFileCapturer()
+    + ~PcapFileCapturer()
+    + open(path : std::string)
+    + close()
+  }
+
+  LiveCapturer --|> PacketCapturer
+  PcapFileCapturer --|> PacketCapturer
+}
+
+package "loki23 dependencies" <<Frame>> {
+  class "SmartPtr<T, OwnPolicy>" as SmartPtr <<template>>
+  class "DynamicDispatcher<...>" as DynamicDispatcher <<template>>
+  class "StaticDispatcher<...>" as StaticDispatcher <<template>>
+  class "HierarchyFactory<Base, Types>" as HierarchyFactory <<template>>
+  class "Field<T>" as Field <<template>>
+  class "type_list<Ts...>" as type_list <<template>>
+  class RefCountedMT <<policy>>
+  class NoCopy <<policy>>
+}
+
+package "PcapPlusPlus" <<Frame>> {
+  class "pcpp::Packet" as PcppPacket <<external>>
+  class "pcpp::RawPacket" as RawPacket <<external>>
+  class "pcpp::IPv4Layer" as IPv4Layer <<external>>
+  class "pcpp::TcpLayer" as TcpLayer <<external>>
+  class "pcpp::UdpLayer" as UdpLayer <<external>>
+  class "pcpp::DnsLayer" as DnsLayer <<external>>
+  class "pcpp::PcapLiveDevice" as PcapLiveDevice <<external>>
+  class "pcpp::PcapLiveDeviceList" as PcapLiveDeviceList <<external>>
+  class "pcpp::PcapFileReaderDevice" as PcapFileReaderDevice <<external>>
+}
+
+PacketCapturer "1" o-- "0..*" PacketListener : notifies
+PacketCapturer ..> NetPacket : dispatches
+PacketCapturer ..> DnsPacket : parse()
+PacketCapturer ..> HttpPacket : parse()
+PacketCapturer ..> TcpPacket : parse()
+PacketCapturer ..> UdpPacket : parse()
+
+PacketListener o-- SmartPtr : queue_, last_packet_
+PacketListener ..> NetPacket : on_packet()
+PacketLogger ..> NetPacket : prints
+StatisticsListener ..> HttpPacket : dynamic_cast
+StatisticsListener ..> TcpPacket : dynamic_cast
+StatisticsListener ..> UdpPacket : dynamic_cast
+StatisticsListener ..> DnsPacket : dynamic_cast
+SmartListener *-- DynamicDispatcher : dispatcher_
+SmartListener ..> StaticDispatcher : sequence matching
+SmartListener ..> DnsPacket
+SmartListener ..> HttpPacket
+SmartListener ..> TcpPacket
+SmartListener ..> UdpPacket
+
+PcapFileCapturer o-- SmartPtr : reader_
+PcapFileCapturer ..> PcapFileReaderDevice : reads
+LiveCapturer o-- PcapLiveDevice : device_
+LiveCapturer ..> PcapLiveDeviceList : selects interface
+
+NetPacket ..> IPv4Layer : fill_base()
+NetPacket ..> RawPacket : fill_base()
+TcpPacket ..> PcppPacket : parses
+TcpPacket ..> TcpLayer : extracts TCP
+HttpPacket ..> PcppPacket : parses HTTP
+DnsPacket ..> DnsLayer : extracts DNS
+UdpPacket ..> UdpLayer : extracts UDP
+
+SmartPtr ..> RefCountedMT
+SmartPtr ..> NoCopy
+
+class "main.cpp" as Main <<entrypoint>>
+Main ..> type_list : Listeners, Capturers
+Main ..> HierarchyFactory : creates listeners/capturers
+Main ..> Field : selects implementation
+Main ..> SmartPtr : owns objects
+Main ..> PacketListener
+Main ..> PacketCapturer
+Main ..> StatisticsListener : print_report()
+
+@enduml
