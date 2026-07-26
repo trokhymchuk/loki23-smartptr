@@ -1,6 +1,7 @@
 module;
 
 #include <concepts>
+#include <type_traits>
 #include <utility>
 
 export module loki23.smart_ptr;
@@ -30,7 +31,7 @@ export {
     void clean() {
       handle_type h = storage_.get();
       if (Store::is_valid(h) && ownership_.release(h))
-        Store::destroy(h);
+        storage_.destroy(h);
     }
 
   public:
@@ -40,6 +41,19 @@ export {
       storage_.set(h);
       if (Store::is_valid(h))
         ownership_.acquire(h);
+      CheckPolicy::check(Store::is_valid(h));
+    }
+
+    template <typename... Args>
+        requires (InitializableStorage<Store, Tval> &&
+                  std::constructible_from<Tval, Args...> &&
+                  sizeof...(Args) > 0 &&
+                  !(sizeof...(Args) == 1 &&
+                    (std::same_as<std::remove_cvref_t<Args>, handle_type> || ...)))
+    explicit SmartPtr(Args &&...args) {
+      storage_.init(std::forward<Args>(args)...);
+      handle_type h = storage_.get();
+      ownership_.acquire(h);
       CheckPolicy::check(Store::is_valid(h));
     }
 

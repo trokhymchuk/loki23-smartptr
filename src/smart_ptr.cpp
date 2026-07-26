@@ -12,4 +12,8 @@ int main() {
     sptr = SmartPtr_t{};
 
     std::cout << sptr_copy.get() << '\n';
+
+    // In-place construction: no explicit new needed
+    SmartPtr_t sptr2(5);
+    std::cout << *sptr2 << '\n';
 }
