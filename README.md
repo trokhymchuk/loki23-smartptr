@@ -1,7 +1,7 @@
 # Smart Pointer Policies in Modern C++ (Loki23)
 
 Source code accompanying a work by V. Boublik, A. Trokhymchuk, A. Romaniuk and O. Zhytnetskyi (National University of Kyiv-Mohyla Academy):
-- *Towards the Issue of Smart Pointer Policies in Modern C++*. Theses, TAAPSD 2026.
+- *Resource Ownership and Storage in Smart Pointers*. Theses, TAAPSD 2026.
    
 ## Where to look
 
